@@ -2,7 +2,7 @@ import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler,
-    filters, ContextTypes
+    ContextTypes, filters
 )
 import requests
 
@@ -11,20 +11,11 @@ OWNER_ID = int(os.getenv("OWNER_ID"))
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 admins = [OWNER_ID]
+private_users = set()
+group_chats = set()
+pending_broadcast = {}
 
-# Start command
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hey! I'm your CINDRELLA 🤖")
-
-# Respond to hi, hello etc.
-async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.text.lower() in ["hi", "hello", "hey", "start"]:
-        await update.message.reply_text("Hello! How can I help you? 🌟")
-    else:
-        reply = await ask_openrouter_ai(update.message.text)
-        await update.message.reply_text(reply)
-
-# Ask OpenRouter AI
+# === AI Reply ===
 async def ask_openrouter_ai(prompt):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -37,11 +28,7 @@ async def ask_openrouter_ai(prompt):
         "messages": [
             {
                 "role": "system",
-                "content": (
-                    "You are CINDRELLA, a 16-year-old emotionally intelligent girl. "
-                    "You talk in a warm, friendly, human-like way. Always respond only in English. "
-                    "You're kind, realistic, smart, and emotionally supportive like a best friend."
-                )
+                "content": "You are CINDRELLA, a 16-year-old girl. You are sweet, kind, curious, emotionally intelligent and speak only English. You talk like a real person and connect emotionally like a best friend."
             },
             {"role": "user", "content": prompt}
         ]
@@ -53,15 +40,41 @@ async def ask_openrouter_ai(prompt):
     except Exception as e:
         return f"Something went wrong: {e}"
 
-# Admin panel
+# === Start Command ===
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    if chat.type == "private":
+        private_users.add(chat.id)
+    elif chat.type in ["group", "supergroup"]:
+        group_chats.add(chat.id)
+    await update.message.reply_text("Hey! I'm your CINDRELLA 🤖")
+
+# === Message Handler ===
+async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    if chat.type == "private":
+        private_users.add(chat.id)
+    elif chat.type in ["group", "supergroup"]:
+        group_chats.add(chat.id)
+
+    if update.message.text.lower() in ["hi", "hello", "hey", "start"]:
+        await update.message.reply_text("Hello! How can I help you? 🌟")
+    elif update.effective_user.id in pending_broadcast:
+        text = update.message.text
+        await broadcast_message(context, text)
+        del pending_broadcast[update.effective_user.id]
+        await update.message.reply_text("✅ Broadcast sent!")
+    else:
+        reply = await ask_openrouter_ai(update.message.text)
+        await update.message.reply_text(reply)
+
+# === Admin Panel ===
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != OWNER_ID and user_id not in admins:
         return
 
-    keyboard = [
-        [InlineKeyboardButton("📢 Broadcast", url="https://t.me/YOUR_CHANNEL")],
-    ]
+    keyboard = [[InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")]]
 
     if user_id == OWNER_ID:
         keyboard.append([
@@ -72,47 +85,62 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("🔐 Admin Panel", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# Callback handler
+# === Callback Handler ===
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
     user_id = query.from_user.id
+    await query.answer()
 
-    if user_id != OWNER_ID:
+    if user_id != OWNER_ID and user_id not in admins:
         return
 
-    if query.data == "list_admins":
-        await query.message.reply_text("Current admins:\n" + "\n".join([str(a) for a in admins]))
-    elif query.data == "add_admin":
-        await query.message.reply_text("Send the user ID to add:")
+    if query.data == "broadcast":
+        pending_broadcast[user_id] = True
+        await query.message.reply_text("📝 Send the message to broadcast:")
+    elif query.data == "list_admins" and user_id == OWNER_ID:
+        await query.message.reply_text("👑 Admins:\n" + "\n".join([str(a) for a in admins]))
+    elif query.data == "add_admin" and user_id == OWNER_ID:
         context.user_data["action"] = "add"
-    elif query.data == "remove_admin":
-        await query.message.reply_text("Send the user ID to remove:")
+        await query.message.reply_text("Send the user ID to add:")
+    elif query.data == "remove_admin" and user_id == OWNER_ID:
         context.user_data["action"] = "remove"
+        await query.message.reply_text("Send the user ID to remove:")
 
-# Handle admin ID entry
+# === Handle Admin ID Entry ===
 async def handle_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "action" not in context.user_data:
         return
-
     try:
         user_id = int(update.message.text)
-        action = context.user_data["action"]
-
-        if action == "add":
-            if user_id not in admins:
-                admins.append(user_id)
-                await update.message.reply_text(f"✅ Added {user_id} as admin.")
-        elif action == "remove":
-            if user_id in admins:
-                admins.remove(user_id)
-                await update.message.reply_text(f"❌ Removed {user_id} from admin list.")
     except:
-        await update.message.reply_text("⚠️ Invalid ID. Please enter a valid number.")
+        await update.message.reply_text("❌ Invalid ID.")
+        return
 
+    action = context.user_data["action"]
+    if action == "add":
+        if user_id not in admins:
+            admins.append(user_id)
+            await update.message.reply_text(f"✅ Added {user_id} as admin.")
+    elif action == "remove":
+        if user_id in admins:
+            admins.remove(user_id)
+            await update.message.reply_text(f"❌ Removed {user_id} from admin list.")
     context.user_data.clear()
 
-# Main
+# === Broadcast ===
+async def broadcast_message(context, message):
+    for user_id in private_users:
+        try:
+            await context.bot.send_message(chat_id=user_id, text=message)
+        except:
+            pass
+    for group_id in group_chats:
+        try:
+            await context.bot.send_message(chat_id=group_id, text=message)
+        except:
+            pass
+
+# === Main ===
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
