@@ -1,10 +1,10 @@
 services:
   - type: web
-    name: cindrella-bot
-    runtime: python
-    pythonVersion: 3.11.8
+    name: my-bot
+    env: python
+    region: singapore
     buildCommand: pip install -r requirements.txt
-    startCommand: python bot.py
+    startCommand: python my_bot.py
     envVars:
       - key: BOT_TOKEN
         value: 7600489635:AAEXc3iBM7g_O_L6_yL3h5vNN4o_BSWsLDE
@@ -12,3 +12,5 @@ services:
         value: "6559745280"
       - key: OPENROUTER_API_KEY
         value: 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
+      - key: WEBHOOK_URL
+        value: https://your-service-name.onrender.com/webhook
