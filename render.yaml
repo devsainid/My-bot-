@@ -1,12 +1,13 @@
-
 services:
   - type: web
-    name: cindrella
-    runtime: python
+    name: your-cindrella-bot
+    env: python
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
     envVars:
       - key: BOT_TOKEN
-        sync: false
+        value: 7600489635:AAEXc3iBM7g_O_L6_yL3h5vNN4o_BSWsLDE
       - key: OWNER_ID
-        sync: false
+        value: "6559745280"
+      - key: OPENROUTER_API_KEY
+        value: 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
