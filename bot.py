@@ -170,7 +170,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
         response = httpx.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data, timeout=30)
         reply = response.json()["choices"][0]["message"]["content"]
-    except Exception as e:
+    except Exception:
         reply = "Oops, I'm OFFLINE right now 😭😭"
 
     await update.message.reply_text(reply)
@@ -189,11 +189,15 @@ def webhook():
     application.update_queue.put_nowait(update)
     return "OK"
 
+# === SET WEBHOOK + INIT ===
+
 async def set_webhook():
+    await application.initialize()
     await bot.set_webhook(f"{WEBHOOK_URL}/webhook")
+    await application.start()
 
 asyncio.run(set_webhook())
 
-# ✅ RENDER fix added below:
+# === FLASK SERVER (for RENDER) ===
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
