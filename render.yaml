@@ -13,4 +13,4 @@ services:
       - key: OPENROUTER_API_KEY
         value: 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
       - key: WEBHOOK_URL
-        value: https://your-service-name.onrender.com/webhook
+        value: https://my-bot-l8bf.onrender.com/webhook
