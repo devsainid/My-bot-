@@ -1,143 +1,176 @@
-import logging
 import os
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler,
-    ContextTypes, filters
-)
+import logging
 import httpx
+from flask import Flask, request
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application, ContextTypes, CommandHandler,
+    MessageHandler, CallbackQueryHandler, filters
+)
 
-# Basic Config
-BOT_TOKEN = "7600489635:AAEXc3iBM7g_O_L6_yL3h5vNN4o_BSWsLDE"
-OWNER_ID = 6559745280
-ADMINS = set()
-OPENROUTER_API_KEY = "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"
+# Load config
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+OWNER_ID = 6559745280  # Replace with your real owner ID
 
-# Log
+admins = {OWNER_ID}
+user_chats = set()
+group_chats = set()
+
+# System prompt
+SYSTEM_PROMPT = {
+    "role": "system",
+    "content": "You are CINDRELLA, a 16-year-old girl. You are sweet, kind, emotionally intelligent and speak only English. You talk like a real person and connect emotionally like a best friend."
+}
+
+# Set up Flask app
+flask_app = Flask(__name__)
+
+# Set up logging
 logging.basicConfig(level=logging.INFO)
 
-# --- AI REPLY HANDLER ---
-async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    if not text:
-        return
-
-    prompt = [
-        {"role": "system", "content": "You are CINDRELLA, a 16-year-old girl. You are sweet, kind, emotionally intelligent and speak only English. You talk like a real person and connect emotionally like a best friend."},
-        {"role": "user", "content": text}
-    ]
+# Send message using OpenRouter
+async def ask_openrouter(prompt):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "HTTP-Referer": "https://t.me/YOUR_CINDRELLABOT",
         "Content-Type": "application/json"
     }
-
+    payload = {
+        "model": "openchat/openchat-3.5",
+        "messages": [
+            SYSTEM_PROMPT,
+            {"role": "user", "content": prompt}
+        ]
+    }
     try:
-        response = httpx.post("https://openrouter.ai/api/v1/chat/completions",
-                              headers=headers,
-                              json={"model": "openchat/openchat-3.5", "messages": prompt})
-        reply = response.json()["choices"][0]["message"]["content"]
-        await update.message.reply_text(reply)
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers, json=payload, timeout=30
+            )
+            return response.json()["choices"][0]["message"]["content"]
     except Exception as e:
-        logging.error(e)
-        await update.message.reply_text("Something went wrong.")
+        return f"Something went wrong! {e}"
 
-# --- ADMIN PANEL ---
-async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Start command
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    user_chats.add(user.id)
+    await update.message.reply_text("Hi, I'm CINDRELLA 🌸. Let's talk!")
+
+# Admin panel
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if user_id != OWNER_ID and user_id not in ADMINS:
-        return await update.message.reply_text("You are not allowed.")
+    if user_id not in admins:
+        return await update.message.reply_text("You are not authorized.")
     
-    keyboard = [
+    buttons = [
         [InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")]
     ]
+
     if user_id == OWNER_ID:
-        keyboard += [
+        buttons += [
             [InlineKeyboardButton("➕ Add Admin", callback_data="add_admin")],
             [InlineKeyboardButton("➖ Remove Admin", callback_data="remove_admin")],
             [InlineKeyboardButton("📋 List Admins", callback_data="list_admins")]
         ]
-    await update.message.reply_text("🔐 Admin Panel", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text("🔐 Admin Panel", reply_markup=InlineKeyboardMarkup(buttons))
 
-# --- CALLBACK HANDLERS ---
-ADD_ADMIN, REMOVE_ADMIN, BROADCAST = range(3)
-
+# Handle button clicks
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    user_id = query.from_user.id
     await query.answer()
-    
-    if query.data == "broadcast" and (user_id == OWNER_ID or user_id in ADMINS):
-        await query.message.reply_text("Send the broadcast message now:")
+    user_id = query.from_user.id
+
+    if user_id not in admins:
+        return await query.edit_message_text("You are not authorized.")
+
+    data = query.data
+
+    if data == "broadcast":
         context.user_data["action"] = "broadcast"
-    
-    elif query.data == "add_admin" and user_id == OWNER_ID:
-        await query.message.reply_text("Send ID to add as admin:")
+        await query.edit_message_text("Send the message to broadcast.")
+
+    elif data == "add_admin" and user_id == OWNER_ID:
         context.user_data["action"] = "add_admin"
+        await query.edit_message_text("Send the user ID to add as admin.")
 
-    elif query.data == "remove_admin" and user_id == OWNER_ID:
-        await query.message.reply_text("Send ID to remove from admins:")
+    elif data == "remove_admin" and user_id == OWNER_ID:
         context.user_data["action"] = "remove_admin"
+        await query.edit_message_text("Send the user ID to remove from admins.")
 
-    elif query.data == "list_admins" and user_id == OWNER_ID:
-        if ADMINS:
-            admins_text = "\n".join(str(admin) for admin in ADMINS)
-        else:
-            admins_text = "No admins added."
-        await query.message.reply_text(admins_text)
+    elif data == "list_admins" and user_id == OWNER_ID:
+        await query.edit_message_text(f"Admins:\n" + "\n".join(str(a) for a in admins))
 
-# --- HANDLE TEXT AFTER BUTTONS ---
-async def handle_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    action = context.user_data.get("action")
+# Handle text
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
     text = update.message.text
 
-    if action == "add_admin":
+    # Save private or group chat
+    if update.message.chat.type == "private":
+        user_chats.add(update.message.chat.id)
+    elif update.message.chat.type in ["group", "supergroup"]:
+        group_chats.add(update.message.chat.id)
+
+    # Owner/admin actions
+    if user_id in admins and "action" in context.user_data:
+        action = context.user_data.pop("action")
+
+        if action == "broadcast":
+            for uid in user_chats:
+                try:
+                    await context.bot.send_message(chat_id=uid, text=text)
+                except:
+                    pass
+            for gid in group_chats:
+                try:
+                    await context.bot.send_message(chat_id=gid, text=text)
+                except:
+                    pass
+            return await update.message.reply_text("✅ Broadcast sent.")
+
+        elif action == "add_admin":
+            admins.add(int(text))
+            return await update.message.reply_text("✅ Admin added.")
+
+        elif action == "remove_admin":
+            admins.discard(int(text))
+            return await update.message.reply_text("✅ Admin removed.")
+
+    # Forward message to owner/admins
+    for admin_id in admins:
         try:
-            ADMINS.add(int(text))
-            await update.message.reply_text("Admin added successfully.")
+            msg_link = f"https://t.me/c/{str(update.message.chat.id)[4:]}/{update.message.message_id}" if update.message.chat.type != "private" else ""
+            await context.bot.send_message(chat_id=admin_id,
+                                           text=f"📩 From {update.effective_user.username or update.effective_user.first_name}:\n{text}\n{msg_link}")
         except:
-            await update.message.reply_text("Invalid ID.")
-        context.user_data.pop("action")
+            pass
 
-    elif action == "remove_admin":
-        try:
-            ADMINS.remove(int(text))
-            await update.message.reply_text("Admin removed.")
-        except:
-            await update.message.reply_text("ID not in admin list.")
-        context.user_data.pop("action")
+    # Chatbot reply
+    reply = await ask_openrouter(text)
+    await update.message.reply_text(reply)
 
-    elif action == "broadcast":
-        # Broadcast to all known chats (you can add group/user tracking logic here)
-        await update.message.reply_text("Broadcast sent.")
-        context.user_data.pop("action")
+# Create the application
+application = Application.builder().token(BOT_TOKEN).build()
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("admin", admin_panel))
+application.add_handler(CallbackQueryHandler(button_handler))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-# --- FORWARD SYSTEM ---
-async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    chat = update.effective_chat
+# Flask webhook route
+@flask_app.route("/webhook", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    application.update_queue.put_nowait(update)
+    return "ok"
 
-    text = f"📨 From: @{user.username or user.id} | Chat ID: `{chat.id}`\n\n{update.message.text or 'non-text message'}"
-
-    # Forward to owner + all admins
-    recipients = [OWNER_ID] + list(ADMINS)
-    for admin_id in recipients:
-        try:
-            await context.bot.send_message(admin_id, text, parse_mode="Markdown")
-        except Exception as e:
-            logging.warning(f"Can't forward to {admin_id}: {e}")
-
-# --- MAIN ---
-def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    
-    app.add_handler(CommandHandler("admin", admin))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_response))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ai_reply))
-    app.add_handler(MessageHandler(filters.ALL, forward_all))  # Forward anything else
-
-    app.run_polling()
+# Set webhook
+async def set_webhook():
+    await application.bot.set_webhook(WEBHOOK_URL)
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(set_webhook())
+    application.run_polling()  # Also starts the internal updater for webhook
