@@ -5,13 +5,11 @@ import logging
 import asyncio
 from flask import Flask, request
 from telegram import (
-    Bot, Update, InlineKeyboardButton,
-    InlineKeyboardMarkup
+    Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
 )
 from telegram.ext import (
-    ApplicationBuilder, ContextTypes,
-    CommandHandler, MessageHandler,
-    CallbackQueryHandler, filters
+    Application, ApplicationBuilder, ContextTypes,
+    CommandHandler, MessageHandler, CallbackQueryHandler, filters
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -21,10 +19,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = int(os.getenv("OWNER_ID"))
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-
-# Data
-ADMINS_FILE = "admins.json"
-admins = []
+PORT = int(os.environ.get("PORT", 10000))
 
 # System prompt
 SYSTEM_PROMPT = {
@@ -32,16 +27,13 @@ SYSTEM_PROMPT = {
     "content": "You are CINDRELLA, a 16-year-old girl. You are sweet, kind, emotionally intelligent and speak only English. You talk like a real person and connect emotionally like a best friend."
 }
 
-# Bot init
-bot = Bot(token=BOT_TOKEN)
-app = Flask(__name__)
+ADMINS_FILE = "admins.json"
+admins = []
 
-# Load admins
+# Load admins from file
 if os.path.exists(ADMINS_FILE):
     with open(ADMINS_FILE, "r") as f:
         admins = json.load(f)
-else:
-    admins = []
 
 def save_admins():
     with open(ADMINS_FILE, "w") as f:
@@ -50,7 +42,11 @@ def save_admins():
 def is_admin(user_id):
     return user_id == OWNER_ID or user_id in admins
 
-# === COMMANDS ===
+# Flask app
+flask_app = Flask(__name__)
+bot = Bot(BOT_TOKEN)
+
+# === Telegram Bot Handlers ===
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Hey, I'm CINDRELLA 💫 so what's in your mind !")
@@ -60,10 +56,7 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(user_id):
         return await update.message.reply_text("You are not allowed.")
 
-    buttons = [
-        [InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")]
-    ]
-
+    buttons = [[InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")]]
     if user_id == OWNER_ID:
         buttons += [
             [InlineKeyboardButton("➕ Add Admin", callback_data="add_admin")],
@@ -74,8 +67,6 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     markup = InlineKeyboardMarkup(buttons)
     await update.message.reply_text("👑 Admin Panel:", reply_markup=markup)
 
-# === CALLBACKS ===
-
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -85,33 +76,26 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await query.message.reply_text("Not allowed.")
 
     data = query.data
+    context.user_data["awaiting"] = data
 
     if data == "broadcast":
-        context.user_data["awaiting"] = "broadcast"
         await query.message.reply_text("📢 Send the message to broadcast:")
-
     elif data == "add_admin" and user_id == OWNER_ID:
-        context.user_data["awaiting"] = "add_admin"
         await query.message.reply_text("Enter user ID to add as admin:")
-
     elif data == "remove_admin" and user_id == OWNER_ID:
-        context.user_data["awaiting"] = "remove_admin"
         await query.message.reply_text("Enter admin ID to remove:")
-
     elif data == "list_admins" and user_id == OWNER_ID:
         if admins:
             await query.message.reply_text("👥 Admins:\n" + "\n".join(map(str, admins)))
         else:
             await query.message.reply_text("No admins yet.")
 
-# === TEXT HANDLING ===
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user_id = update.effective_user.id
     username = update.effective_user.username or "unknown"
 
-    # Forward to owner/admins
+    # Forward to owner + admins
     for admin_id in [OWNER_ID] + admins:
         try:
             await bot.send_message(
@@ -122,7 +106,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
-    # Admin tasks
+    # Handle awaiting actions
     awaiting = context.user_data.get("awaiting")
     if awaiting:
         if awaiting == "broadcast" and is_admin(user_id):
@@ -140,7 +124,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     save_admins()
                     await update.message.reply_text("✅ Admin added.")
                 else:
-                    await update.message.reply_text("Already admin.")
+                    await update.message.reply_text("Already an admin.")
             except:
                 await update.message.reply_text("Invalid ID.")
         elif awaiting == "remove_admin" and user_id == OWNER_ID:
@@ -151,13 +135,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     save_admins()
                     await update.message.reply_text("✅ Admin removed.")
                 else:
-                    await update.message.reply_text("Not found in admins.")
+                    await update.message.reply_text("Admin not found.")
             except:
                 await update.message.reply_text("Invalid ID.")
         context.user_data["awaiting"] = None
         return
 
-    # AI reply
+    # AI Chat Reply
     try:
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -170,34 +154,36 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
         response = httpx.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data, timeout=30)
         reply = response.json()["choices"][0]["message"]["content"]
-    except Exception:
+    except:
         reply = "Oops, I'm OFFLINE right now 😭😭"
 
     await update.message.reply_text(reply)
 
-# === TELEGRAM APP SETUP ===
-
-application = ApplicationBuilder().token(BOT_TOKEN).build()
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("admin", admin))
-application.add_handler(CallbackQueryHandler(button_handler))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-@app.route("/webhook", methods=["POST"])
+# === Webhook Route ===
+@flask_app.route("/webhook", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
-    application.update_queue.put_nowait(update)
+    flask_app.bot_app.update_queue.put_nowait(update)
     return "OK"
 
-# === SET WEBHOOK + INIT ===
+# === Main async setup ===
+async def main():
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("admin", admin))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-async def set_webhook():
-    await application.initialize()
+    flask_app.bot_app = app
+
     await bot.set_webhook(f"{WEBHOOK_URL}/webhook")
-    await application.start()
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()  # Important: Required even with webhook for queue processing
 
-asyncio.run(set_webhook())
+    print("Bot running...")
 
-# === FLASK SERVER (for RENDER) ===
+# === Run Flask and Telegram Bot ===
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    asyncio.get_event_loop().create_task(main())
+    flask_app.run(host="0.0.0.0", port=PORT)
