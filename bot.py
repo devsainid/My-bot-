@@ -9,7 +9,6 @@ from telegram.ext import (
     ContextTypes, filters, AIORateLimiter
 )
 
-# --- CONFIG ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = int(os.getenv("OWNER_ID"))
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -19,7 +18,6 @@ admins = [OWNER_ID]
 users = set()
 group_ids = set()
 
-# --- APP + BOT ---
 app = Flask(__name__)
 bot_app = Application.builder().token(BOT_TOKEN).rate_limiter(AIORateLimiter()).build()
 
@@ -31,7 +29,7 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = "Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?"
     await update.message.reply_text(msg, reply_markup=keyboard)
 
-# --- AI Chat Handler ---
+# --- AI Handler ---
 async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user_id = update.effective_user.id
@@ -42,7 +40,6 @@ async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         users.add(chat_id)
 
-    # Forward to admins
     for admin_id in admins:
         try:
             await context.bot.send_message(
@@ -52,7 +49,6 @@ async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
-    # Trigger AI only on private or greetings in group
     greetings = ["hi", "hello", "hey", "sup", "yo", "heyy", "heya"]
     if update.message.chat.type in ['group', 'supergroup'] and text.lower().strip() not in greetings:
         return
@@ -140,17 +136,7 @@ bot_app.add_handler(CallbackQueryHandler(handle_callback))
 bot_app.add_handler(MessageHandler(filters.TEXT & filters.User(OWNER_ID), handle_admin_response))
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_msg))
 
-# --- Webhook Setup ---
-@app.before_first_request
-def start_bot():
-    asyncio.create_task(initialize_bot())
-
-async def initialize_bot():
-    await bot_app.initialize()
-    await bot_app.bot.set_webhook(WEBHOOK_URL)
-    await bot_app.start()
-
-# --- Flask Routes ---
+# --- Webhook & Run ---
 @app.route("/", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot_app.bot)
@@ -161,5 +147,16 @@ def webhook():
 def root():
     return "Running."
 
-# --- Start server ---
-app.run(host="0.0.0.0", port=10000)
+# --- Background Task to Start Bot ---
+async def run_bot():
+    await bot_app.initialize()
+    await bot_app.bot.set_webhook(WEBHOOK_URL)
+    await bot_app.start()
+
+def run():
+    loop = asyncio.get_event_loop()
+    loop.create_task(run_bot())
+    app.run(host="0.0.0.0", port=10000)
+
+if __name__ == "__main__":
+    run()
