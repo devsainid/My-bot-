@@ -146,14 +146,14 @@ async def get_ai_reply(msg):
         )
         return res.json()["choices"][0]["message"]["content"]
     except:
-        return "I'm having trouble replying right now."
+        return "I'm ofline  right now my dear sir ."
 
 # ========== Webhook Setup ==========
 
 @app.route("/", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot.bot)
-    bot.application.update_queue.put_nowait(update)
+    bot.update_queue.put_nowait(update)
     return "ok"
 
 @app.route("/", methods=["GET"])
