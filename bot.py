@@ -132,9 +132,9 @@ def webhook():
     application.update_queue.put_nowait(update)
     return 'OK'
 
-@app.route('/')
-def home():
-    return 'Bot is live!'
+@app.route('/', methods=['GET', 'POST', 'HEAD'])
+def index():
+    return 'Bot is running!'
 
 # --- Handlers ---
 application.add_handler(CommandHandler("start", start))
