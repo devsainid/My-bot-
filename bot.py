@@ -1,156 +1,164 @@
 import os
 import logging
-import requests
-import asyncio
-from flask import Flask, request
-from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ContextTypes, filters
+    ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes,
+    filters, CallbackQueryHandler
 )
+import httpx
 
-# --- ENV ---
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-OWNER_ID = int(os.getenv("OWNER_ID"))
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+# ✅ Basic config
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+OWNER_ID = int(os.environ.get("OWNER_ID", "6559745280"))
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 
-app = Flask(__name__)
-bot = Bot(BOT_TOKEN)
-application = ApplicationBuilder().token(BOT_TOKEN).build()
-admins = [OWNER_ID]
+# ✅ Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = {
+# ✅ Admins list
+ADMINS = set([OWNER_ID])
+
+# ✅ System prompt
+CINDRELLA_SYSTEM_PROMPT = {
     "role": "system",
     "content": "You are CINDRELLA, a 16-year-old girl. You are sweet, kind, emotionally intelligent and speak only English. You talk like a real person and connect emotionally like a best friend."
 }
 
-# --- START ---
+# ✅ AI reply
+async def generate_reply(user_message):
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "HTTP-Referer": "https://t.me/YOUR_CINDRELLABOT",
+                    "X-Title": "CINDRELLA-Telegram-Bot"
+                },
+                json={
+                    "model": "openchat/openchat-3.5",
+                    "messages": [
+                        CINDRELLA_SYSTEM_PROMPT,
+                        {"role": "user", "content": user_message}
+                    ]
+                }
+            )
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
+    except Exception as e:
+        logger.error(f"AI reply error: {e}")
+        return "Oops.. something went wrong sweetie 💔"
+
+# ✅ /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/your_CINDRELLABOT?startgroup=true")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Hey, I'm CINDRELLA 🌹🕯️. How you found me dear 🌹🕯️..?", reply_markup=reply_markup)
+    keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
+    await update.message.reply_text("Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# --- AI Reply ---
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    if not text: return
-
-    if text.lower() in ["hi", "hello", "sup", "hey", "hii", "yo"]:
-        await update.message.reply_text("Hey there 🌸, what's up?")
-        return
-
-    response = await get_openrouter_reply(text)
-    if response:
-        await update.message.reply_text(response)
-
-# --- Admin Panel ---
-async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ✅ /admin command
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if user_id not in admins:
-        await update.message.reply_text("You're not authorized.")
+    if user_id not in ADMINS:
         return
 
     buttons = [[InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")]]
-
     if user_id == OWNER_ID:
         buttons += [
             [InlineKeyboardButton("➕ Add Admin", callback_data="add_admin")],
             [InlineKeyboardButton("➖ Remove Admin", callback_data="remove_admin")],
             [InlineKeyboardButton("📋 List Admins", callback_data="list_admins")]
         ]
+    await update.message.reply_text("🔐 Admin Panel", reply_markup=InlineKeyboardMarkup(buttons))
 
-    await update.message.reply_text("Admin Panel", reply_markup=InlineKeyboardMarkup(buttons))
-
-# --- Callback Handler ---
-async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ✅ Callback query handler
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
     await query.answer()
 
+    if user_id not in ADMINS:
+        return
+
     if query.data == "broadcast":
-        context.user_data["mode"] = "broadcast"
-        await query.message.reply_text("Send the message to broadcast.")
+        context.user_data["action"] = "broadcast"
+        await query.message.reply_text("Send me the broadcast message.")
     elif query.data == "add_admin" and user_id == OWNER_ID:
-        context.user_data["mode"] = "add_admin"
+        context.user_data["action"] = "add_admin"
         await query.message.reply_text("Send user ID to add as admin.")
     elif query.data == "remove_admin" and user_id == OWNER_ID:
-        context.user_data["mode"] = "remove_admin"
+        context.user_data["action"] = "remove_admin"
         await query.message.reply_text("Send user ID to remove from admins.")
     elif query.data == "list_admins" and user_id == OWNER_ID:
-        await query.message.reply_text("Current Admins:\n" + "\n".join(str(a) for a in admins))
+        await query.message.reply_text(f"👮 Admins:\n" + "\n".join(str(a) for a in ADMINS))
 
-# --- Input After Callback ---
-async def handle_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    mode = context.user_data.get("mode")
+# ✅ Handle messages for broadcast/admin management/AI chat
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text
 
-    if mode == "broadcast" and user_id in admins:
-        for chat_id in context.bot_data.get("chats", []):
-            try: await context.bot.send_message(chat_id=chat_id, text=text)
-            except: continue
-        await update.message.reply_text("Broadcast sent ✅")
-    elif mode == "add_admin" and user_id == OWNER_ID:
-        admins.append(int(text))
-        await update.message.reply_text("Admin added ✅")
-    elif mode == "remove_admin" and user_id == OWNER_ID:
+    # 🔐 Owner/Admin only actions
+    if user_id in ADMINS and "action" in context.user_data:
+        action = context.user_data.pop("action")
+
+        if action == "broadcast":
+            for chat_id in context.application.chat_data.keys():
+                try:
+                    await context.bot.send_message(chat_id=chat_id, text=text)
+                except:
+                    pass
+            await update.message.reply_text("📢 Broadcast sent.")
+
+        elif action == "add_admin":
+            try:
+                new_admin = int(text.strip())
+                ADMINS.add(new_admin)
+                await update.message.reply_text(f"✅ Admin {new_admin} added.")
+            except:
+                await update.message.reply_text("❌ Invalid ID.")
+
+        elif action == "remove_admin":
+            try:
+                rem_admin = int(text.strip())
+                if rem_admin in ADMINS:
+                    ADMINS.remove(rem_admin)
+                    await update.message.reply_text(f"✅ Admin {rem_admin} removed.")
+                else:
+                    await update.message.reply_text("❌ ID not in admin list.")
+            except:
+                await update.message.reply_text("❌ Invalid ID.")
+        return
+
+    # 📩 Forward message to OWNER + all admins
+    sender = update.effective_user
+    chat = update.effective_chat
+    for admin_id in ADMINS:
         try:
-            admins.remove(int(text))
-            await update.message.reply_text("Admin removed ✅")
+            await context.bot.forward_message(chat_id=admin_id, from_chat_id=chat.id, message_id=update.message.message_id)
         except:
-            await update.message.reply_text("That admin ID was not found.")
+            pass
 
-    context.user_data["mode"] = None
+    # 💬 AI reply in group or private
+    if chat.type in ["group", "supergroup"]:
+        if text.lower() in ["hi", "hello", "sup", "hey", "heyy"]:
+            reply = await generate_reply(text)
+            await update.message.reply_text(reply, reply_to_message_id=update.message.message_id)
+    else:
+        reply = await generate_reply(text)
+        await update.message.reply_text(reply)
 
-# --- AI via OpenRouter ---
-async def get_openrouter_reply(message):
-    try:
-        headers = {
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        data = {
-            "model": "openchat/openchat-3.5",
-            "messages": [SYSTEM_PROMPT, {"role": "user", "content": message}]
-        }
-        res = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data)
-        return res.json()["choices"][0]["message"]["content"]
-    except:
-        return "Something went wrong!"
+# ✅ Main entry
+if __name__ == "__main__":
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-# --- Track Chat for Broadcast ---
-async def track_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if "chats" not in context.bot_data:
-        context.bot_data["chats"] = set()
-    context.bot_data["chats"].add(update.effective_chat.id)
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("admin", admin_panel))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-# --- Webhook Route ---
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
-    application.update_queue.put_nowait(update)
-    return 'OK'
-
-@app.route('/', methods=['GET', 'POST', 'HEAD'])
-def index():
-    return 'Bot is running!'
-
-# --- Handlers ---
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("admin", admin))
-application.add_handler(CallbackQueryHandler(callback_handler))
-application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_reply))
-application.add_handler(MessageHandler(filters.ALL, handle_message))
-application.add_handler(MessageHandler(filters.ALL, track_chat))
-
-# --- Final Startup ---
-if __name__ == '__main__':
-    async def run():
-        await bot.set_webhook(WEBHOOK_URL)
-        await application.initialize()
-        await application.start()
-
-    import threading
-    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=10000)).start()
-    asyncio.run(run())
+    # ✅ Run webhook (Render-compatible)
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000)),
+        webhook_url=WEBHOOK_URL
+    )
