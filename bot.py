@@ -150,13 +150,18 @@ bot_app.add_handler(CallbackQueryHandler(handle_callback))
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_msg))
 bot_app.add_handler(MessageHandler(filters.TEXT & filters.User(OWNER_ID), handle_admin_response))
 
-# Set webhook on launch
+# --- set webhook ---
 async def set_webhook():
     await bot_app.bot.set_webhook(WEBHOOK_URL)
 
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(set_webhook())
-    bot_app.initialize()
-    bot_app.start()
-    app.run(host="0.0.0.0", port=10000)
+asyncio.run(set_webhook())
+
+# --- Start bot properly ---
+async def run_bot():
+    await bot_app.initialize()
+    await bot_app.start()
+
+asyncio.run(run_bot())
+
+# --- Run Flask server ---
+app.run(host="0.0.0.0", port=10000)
