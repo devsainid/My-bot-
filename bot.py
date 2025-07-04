@@ -152,7 +152,7 @@ async def get_ai_reply(msg):
 
 @app.route("/", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), bot.application.bot)
+    update = Update.de_json(request.get_json(force=True), bot.bot)
     bot.application.update_queue.put_nowait(update)
     return "ok"
 
