@@ -26,7 +26,7 @@ CINDRELLA_SYSTEM_PROMPT = {
     "content": "You are CINDRELLA, a 16-year-old girl. You are sweet, kind, emotionally intelligent and speak only English. You talk like a real person and connect emotionally like a best friend."
 }
 
-# ✅ AI reply
+# ✅ AI reply function (replace old one with this)
 async def generate_reply(user_message):
     try:
         async with httpx.AsyncClient() as client:
@@ -49,7 +49,7 @@ async def generate_reply(user_message):
             return data["choices"][0]["message"]["content"]
     except Exception as e:
         logger.error(f"AI reply error: {e}")
-        return " IM OFLINE RIGHT NOW DEAR 😥💔"
+        return "IM OFFLINE RIGHT NOW DEAR 😥💔"
 
 # ✅ /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
