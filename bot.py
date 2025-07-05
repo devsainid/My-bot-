@@ -2,12 +2,11 @@ import os
 import logging
 import random
 import httpx
-import json
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler,
-    ContextTypes, filters
+    ApplicationBuilder, CommandHandler, MessageHandler,
+    CallbackQueryHandler, ContextTypes, filters
 )
 
 # ✅ Environment Variables
@@ -20,10 +19,10 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ✅ Admin list
+# ✅ Admins
 ADMINS = set([OWNER_ID])
 
-# ✅ Known chat IDs (saved in file)
+# ✅ Chat Memory File
 KNOWN_CHATS_FILE = "known_chats.txt"
 
 def load_known_chats():
@@ -40,13 +39,13 @@ def save_known_chat(chat_id):
 
 known_chats = load_known_chats()
 
-# ✅ System prompt for AI
+# ✅ System prompt
 SYSTEM_PROMPT = {
     "role": "system",
     "content": "You are CINDRELLA, a 16-year-old girl. You are sweet, kind, emotionally intelligent and speak only English. You talk like a real person and connect emotionally like a best friend."
 }
 
-# ✅ Free models
+# ✅ Free AI Models
 FREE_MODELS = [
     "openrouter/cypher-alpha:free",
     "gryphe/mythomax-l2-13b",
@@ -68,7 +67,7 @@ CONVO_START_WORDS = ["hi", "hello", "hey", "heyy", "sup", "good morning", "good 
 def random_greeting():
     return random.choice(GREETINGS)
 
-# ✅ AI Reply
+# ✅ AI Chat
 async def generate_reply(user_message):
     for model in FREE_MODELS:
         try:
@@ -92,7 +91,7 @@ async def generate_reply(user_message):
             logger.warning(f"Model {model} failed: {e}")
     return "MY DEVELOPER IS TRYING TO UPDATE ME IF U HAVE ANY OPENION SO REPORT US HERE ✨ @animalin_tm_empire"
 
-# ✅ Start Command
+# ✅ /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_known_chat(update.effective_chat.id)
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
@@ -101,7 +100,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ✅ Admin Panel
+# ✅ /admin panel
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS:
         return
@@ -114,7 +113,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     await update.message.reply_text("🔐 Admin Panel", reply_markup=InlineKeyboardMarkup(buttons))
 
-# ✅ Button Callback
+# ✅ Button Handling
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -124,17 +123,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["action"] = query.data
     await query.message.reply_text("Send me the input now.")
 
-# ✅ Message Handler
+# ✅ Message Handling
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     user_id = update.effective_user.id
     text = update.message.text or ""
     is_mentioned = f"@{context.bot.username.lower()}" in text.lower()
     is_replied = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
-
     save_known_chat(chat.id)
 
-    # Admin Actions
+    # Admin actions
     if user_id in ADMINS and "action" in context.user_data:
         action = context.user_data.pop("action")
         if action == "broadcast":
@@ -165,7 +163,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("👮 Admins:\n" + "\n".join(str(a) for a in ADMINS))
         return
 
-    # Forward message
+    # Forward
     if chat.type == "private" or is_mentioned or is_replied:
         for admin_id in ADMINS:
             try:
@@ -177,14 +175,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except:
                 pass
 
-    # AI reply
+    # Chat
     if chat.type in ["group", "supergroup"]:
-        if text.lower().strip() in CONVO_START_WORDS or is_mentioned or is_replied:
-            if text.lower().strip() in CONVO_START_WORDS:
-                await update.message.reply_text(random_greeting(), reply_to_message_id=update.message.message_id)
-            else:
-                reply = await generate_reply(text)
-                await update.message.reply_text(reply, reply_to_message_id=update.message.message_id)
+        if any(word in text.lower() for word in CONVO_START_WORDS):
+            await update.message.reply_text(random_greeting(), reply_to_message_id=update.message.message_id)
+        elif is_mentioned or is_replied:
+            reply = await generate_reply(text)
+            await update.message.reply_text(reply, reply_to_message_id=update.message.message_id)
     elif chat.type == "private":
         reply = await generate_reply(text)
         await update.message.reply_text(reply)
@@ -200,4 +197,4 @@ if __name__ == "__main__":
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
         webhook_url=WEBHOOK_URL,
-                )
+            )
