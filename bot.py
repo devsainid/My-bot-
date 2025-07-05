@@ -179,11 +179,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # AI reply
     if chat.type in ["group", "supergroup"]:
-        if text.lower() in CONVO_START_WORDS:
-            await update.message.reply_text(random_greeting(), reply_to_message_id=update.message.message_id)
-        elif is_mentioned or is_replied:
-            reply = await generate_reply(text)
-            await update.message.reply_text(reply, reply_to_message_id=update.message.message_id)
+        if text.lower().strip() in CONVO_START_WORDS or is_mentioned or is_replied:
+            if text.lower().strip() in CONVO_START_WORDS:
+                await update.message.reply_text(random_greeting(), reply_to_message_id=update.message.message_id)
+            else:
+                reply = await generate_reply(text)
+                await update.message.reply_text(reply, reply_to_message_id=update.message.message_id)
     elif chat.type == "private":
         reply = await generate_reply(text)
         await update.message.reply_text(reply)
