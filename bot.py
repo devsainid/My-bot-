@@ -27,7 +27,6 @@ CINDRELLA_SYSTEM_PROMPT = {
 }
 
 # ✅ AI reply
-# ✅ AI reply
 async def generate_reply(user_message):
     try:
         async with httpx.AsyncClient() as client:
@@ -51,8 +50,8 @@ async def generate_reply(user_message):
             return data["choices"][0]["message"]["content"]
     except Exception as e:
         logger.error(f"❌ AI reply error: {e}")
-        return "IM OFFLINE RIGHT NOW DEAR 😥💔"
-        
+        return " IM OFFLINE RIGHT NOW DEAR 😥💔"
+
 # ✅ /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
@@ -97,7 +96,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ✅ Handle messages for broadcast/admin management/AI chat
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    text = update.message.text
+    chat = update.effective_chat
+    text = update.message.text or ""
+    is_mentioned = f"@{context.bot.username.lower()}" in text.lower()
+    is_replied = bool(update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id)
 
     # 🔐 Owner/Admin only actions
     if user_id in ADMINS and "action" in context.user_data:
@@ -131,27 +133,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("❌ Invalid ID.")
         return
 
-    # 📩 Forward message to OWNER + all admins
-    sender = update.effective_user
-    chat = update.effective_chat
-    for admin_id in ADMINS:
-        try:
-            await context.bot.forward_message(chat_id=admin_id, from_chat_id=chat.id, message_id=update.message.message_id)
-        except:
-            pass
+    # 📩 Forward only if tag or reply or private chat
+    if chat.type == "private" or is_mentioned or is_replied:
+        for admin_id in ADMINS:
+            try:
+                await context.bot.forward_message(chat_id=admin_id, from_chat_id=chat.id, message_id=update.message.message_id)
+            except:
+                pass
 
-# 💬 AI reply in group or private
+    # 💬 AI reply logic
     if chat.type in ["group", "supergroup"]:
         if (
             text.lower() in ["hi", "hello", "sup", "hey", "heyy"] or
-            update.message.reply_to_message or
-            f"@{context.bot.username.lower()}" in text.lower()
+            is_mentioned or
+            is_replied
         ):
             reply = await generate_reply(text)
             await update.message.reply_text(reply, reply_to_message_id=update.message.message_id)
     else:
         reply = await generate_reply(text)
         await update.message.reply_text(reply)
+
 # ✅ Main entry
 if __name__ == "__main__":
     application = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -161,9 +163,8 @@ if __name__ == "__main__":
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # ✅ Run webhook (Render-compatible)
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
         webhook_url=WEBHOOK_URL
-                )
+        )
