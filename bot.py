@@ -38,7 +38,7 @@ async def generate_reply(user_message):
                     "X-Title": "CINDRELLA-Telegram-Bot"
                 },
                 json={
-                    "model": "openchat/openchat-3.5",
+                    "model": "openchat/openchat-3.5-0106",
                     "messages": [
                         CINDRELLA_SYSTEM_PROMPT,
                         {"role": "user", "content": user_message}
