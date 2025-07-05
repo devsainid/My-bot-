@@ -66,7 +66,7 @@ async def generate_reply(user_message):
                 return "I'm feeling a little tired right now. Please try again in a bit 💭💤"
     except Exception as e:
         logger.error(f"AI Error: {e}")
-        return "MY DEVELOPERS ARE TRYING UP TO DATE ME KINDLY REPORTS US IF U HAVE ANY SUGGESTION @animalin_tm_empire "
+        return "MY DEVELOPERS ARE TRYING UP TO DATE ME KINDLY REPORTS US IF U HAVE ANY SUGGESTION @animalin_tm_empire"
 
 # Start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
