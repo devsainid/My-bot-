@@ -1,41 +1,45 @@
 import os
 import logging
-import random
 import httpx
+from flask import Flask
+from threading import Thread
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
     CallbackQueryHandler, ContextTypes, filters
 )
+import random
+import json
 
-# ENV variables
+# === ENV ===
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = int(os.environ.get("OWNER_ID", "6559745280"))
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+USERS_FILE = "users.json"
 
-# Logging
+# === Logging ===
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Admin list
+# === Admins ===
 ADMINS = set([OWNER_ID])
 
-# AI personality
+# === Personality ===
 SYSTEM_PROMPT = {
     "role": "system",
-    "content": "You are CINDRELLA, a 16-year-old girl. You are sweet, kind, emotionally intelligent and speak only English. You talk like a real person and connect emotionally like a best friend."
+    "content": "You are a 16-year-old sweet, kind, emotionally intelligent girl. You speak only English, like a real person, emotionally connected as a best friend."
 }
 
-# Free fallback models
+# === Models ===
 FREE_MODELS = [
     "openrouter/cypher-alpha:free",
     "gryphe/mythomax-l2-13b",
     "mistralai/mistral-7b-instruct:free",
-    "intel/neural-chat-7b"
+    "intel/neural-chat-7b",
 ]
 
-# Greetings
+# === Greeting Pool ===
 GREETINGS = [
     "Hey there! How can I help you?",
     "Hi dear 🌸 What's up?",
@@ -47,7 +51,18 @@ GREETINGS = [
 def random_greeting():
     return random.choice(GREETINGS)
 
-# AI reply
+# === Load & Save Users ===
+def load_users():
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, "r") as f:
+            return json.load(f)
+    return []
+
+def save_users(users):
+    with open(USERS_FILE, "w") as f:
+        json.dump(users, f)
+
+# === AI Generator ===
 async def generate_reply(user_message):
     for model in FREE_MODELS:
         try:
@@ -71,15 +86,24 @@ async def generate_reply(user_message):
             logger.warning(f"Model {model} failed: {e}")
     return "I'm feeling a little tired right now. Please try again in a bit 💭💤"
 
-# /start
+# === Start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+
+    if update.effective_chat.type == "private":
+        users = load_users()
+        if chat_id not in users:
+            users.append(chat_id)
+            save_users(users)
+
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(
         "HEY, I'M CINDRELLA 🌹🕯️. JOIN FOR BOT UPDATE AND GIVE US YOUR OPENION @animalin_tm_empire🌹🕯️.BTW WHAT'S GOING ON DEAR 🌹🕯️🕯️..??",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# /admin
+# === Admin Panel ===
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in ADMINS:
@@ -93,7 +117,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     await update.message.reply_text("🔐 Admin Panel", reply_markup=InlineKeyboardMarkup(buttons))
 
-# Admin buttons
+# === Button Callback ===
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -112,7 +136,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "list_admins" and user_id == OWNER_ID:
         await query.message.reply_text("👮 Admins:\n" + "\n".join(str(a) for a in ADMINS))
 
-# Message handler
+# === Message Handler ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     chat = update.effective_chat
@@ -120,17 +144,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_mentioned = f"@{context.bot.username.lower()}" in text.lower()
     is_replied = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
 
+    # Save users
+    if chat.type == "private":
+        users = load_users()
+        if chat.id not in users:
+            users.append(chat.id)
+            save_users(users)
+
     # Admin actions
     if user_id in ADMINS and "action" in context.user_data:
         action = context.user_data.pop("action")
         if action == "broadcast":
+            users = load_users()
             count = 0
-            for chat_id in context.application.chat_data.keys():
+            for chat_id in users:
                 try:
                     await context.bot.send_message(chat_id=chat_id, text=text)
                     count += 1
-                except:
-                    pass
+                except: pass
             await update.message.reply_text(f"📢 Broadcast sent to {count} chats.")
         elif action == "add_admin":
             try:
@@ -151,7 +182,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("❌ Invalid ID.")
         return
 
-    # Forward messages
+    # Forwarding
     if chat.type == "private" or is_mentioned or is_replied:
         for admin_id in ADMINS:
             try:
@@ -159,16 +190,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await context.bot.forward_message(admin_id, chat.id, update.message.message_id)
                 else:
                     msg_link = f"https://t.me/c/{str(chat.id)[4:]}/{update.message.message_id}"
-                    await context.bot.send_message(
-                        admin_id,
-                        f"📨 In group @{chat.username or 'unknown'} by @{update.effective_user.username or 'user'}:\n{msg_link}"
-                    )
-            except:
-                pass
+                    await context.bot.send_message(admin_id, f"📨 In group @{chat.username or 'unknown'} by @{update.effective_user.username or 'user'}:\n{msg_link}")
+            except: pass
 
-    # Replies
+    # Reply logic
     if chat.type in ["group", "supergroup"]:
-        if text.lower() in ["hi", "hello", "hey", "heyy", "sup"]:
+        if text.lower() in ["hi", "hello", "hey", "heyy", "sup", "good morning", "good night"]:
             await update.message.reply_text(random_greeting(), reply_to_message_id=update.message.message_id)
         elif is_mentioned or is_replied:
             reply = await generate_reply(text)
@@ -177,7 +204,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = await generate_reply(text)
         await update.message.reply_text(reply)
 
-# Run bot
+# === Run Bot ===
 if __name__ == "__main__":
     app_bot = ApplicationBuilder().token(BOT_TOKEN).build()
     app_bot.add_handler(CommandHandler("start", start))
@@ -188,4 +215,4 @@ if __name__ == "__main__":
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
         webhook_url=WEBHOOK_URL,
-    )
+)
