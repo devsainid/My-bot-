@@ -27,6 +27,7 @@ CINDRELLA_SYSTEM_PROMPT = {
 }
 
 # ✅ AI reply
+# ✅ AI reply
 async def generate_reply(user_message):
     try:
         async with httpx.AsyncClient() as client:
@@ -38,28 +39,20 @@ async def generate_reply(user_message):
                     "X-Title": "CINDRELLA-Telegram-Bot"
                 },
                 json={
-                    "model": "openchat/openchat-3.5-0106",
+                    "model": "openrouter/cypher-alpha:free",
                     "messages": [
                         CINDRELLA_SYSTEM_PROMPT,
                         {"role": "user", "content": user_message}
                     ]
                 }
             )
-
             data = response.json()
             logger.info(f"AI Response Raw: {data}")
-
-            if "choices" in data:
-                return data["choices"][0]["message"]["content"]
-            elif "error" in data:
-                return f"❌ AI Error: {data['error']['message']}"
-            else:
-                return "❌ Unexpected AI response."
-
+            return data["choices"][0]["message"]["content"]
     except Exception as e:
         logger.error(f"❌ AI reply error: {e}")
         return "IM OFFLINE RIGHT NOW DEAR 😥💔"
-
+        
 # ✅ /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
