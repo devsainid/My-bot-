@@ -26,7 +26,7 @@ CINDRELLA_SYSTEM_PROMPT = {
     "content": "You are CINDRELLA, a 16-year-old girl. You are sweet, kind, emotionally intelligent and speak only English. You talk like a real person and connect emotionally like a best friend."
 }
 
-# ✅ AI reply function (replace old one with this)
+# ✅ AI reply
 async def generate_reply(user_message):
     try:
         async with httpx.AsyncClient() as client:
@@ -46,15 +46,16 @@ async def generate_reply(user_message):
                 }
             )
             data = response.json()
+            logger.info(f"AI Response Raw: {data}")  # Yeh line add ki hai
             return data["choices"][0]["message"]["content"]
     except Exception as e:
         logger.error(f"AI reply error: {e}")
-        return "IM OFFLINE RIGHT NOW DEAR 😥💔"
+        return " IM OFFLINE RIGHT NOW DEAR 😥💔"
 
 # ✅ /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
-    await update.message.reply_text("Hey, I'm CINDRELLA 🌹🕯️. join @lazy_guys_here for bot update.  How you found me dear 🌹🕯️ and how can i assist you today dear.?", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text("HEY, I'M CINDRELLA 🌹🕯️. JOIN @lazy_guys_here FOR BOT UPDATE🌹🕯️.  HOW CAN I ASSIST YOU TODAY .?", reply_markup=InlineKeyboardMarkup(keyboard))
 
 # ✅ /admin command
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
