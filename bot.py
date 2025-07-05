@@ -49,12 +49,12 @@ async def generate_reply(user_message):
             return data["choices"][0]["message"]["content"]
     except Exception as e:
         logger.error(f"AI reply error: {e}")
-        return "Oops.. something went wrong sweetie 💔"
+        return " IM OFLINE RIGHT NOW DEAR 😥💔"
 
 # ✅ /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
-    await update.message.reply_text("Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text("Hey, I'm CINDRELLA 🌹🕯️. join @lazy_guys_here for bot update.  How you found me dear 🌹🕯️ and how can i assist you today dear.?", reply_markup=InlineKeyboardMarkup(keyboard))
 
 # ✅ /admin command
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
