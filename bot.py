@@ -1,15 +1,12 @@
 import os
 import logging
-import asyncio
+import random
 import httpx
-from flask import Flask
-from threading import Thread
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
     CallbackQueryHandler, ContextTypes, filters
 )
-import random
 
 # ENV variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -24,13 +21,21 @@ logger = logging.getLogger(__name__)
 # Admin list
 ADMINS = set([OWNER_ID])
 
-# System prompt
+# AI personality
 SYSTEM_PROMPT = {
     "role": "system",
     "content": "You are CINDRELLA, a 16-year-old girl. You are sweet, kind, emotionally intelligent and speak only English. You talk like a real person and connect emotionally like a best friend."
 }
 
-# AI greeting pool
+# Free fallback models
+FREE_MODELS = [
+    "openrouter/cypher-alpha:free",
+    "gryphe/mythomax-l2-13b",
+    "mistralai/mistral-7b-instruct:free",
+    "intel/neural-chat-7b"
+]
+
+# Greetings
 GREETINGS = [
     "Hey there! How can I help you?",
     "Hi dear 🌸 What's up?",
@@ -44,39 +49,37 @@ def random_greeting():
 
 # AI reply
 async def generate_reply(user_message):
-    try:
-        async with httpx.AsyncClient() as client:
-            res = await client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "HTTP-Referer": "https://t.me/YOUR_CINDRELLABOT",
-                    "X-Title": "CINDRELLA-Bot"
-                },
-                json={
-                    "model": "gryphe/mythomax-l2:free",
-                    "messages": [SYSTEM_PROMPT, {"role": "user", "content": user_message}]
-                }
-            )
-            data = res.json()
-            if "choices" in data:
-                return data["choices"][0]["message"]["content"]
-            else:
-                logger.error(f"Invalid AI response: {data}")
-                return "I'm feeling a little tired right now. Please try again in a bit 💭💤"
-    except Exception as e:
-        logger.error(f"AI Error: {e}")
-        return "MY DEVELOPERS ARE TRYING UP TO DATE ME KINDLY REPORTS US IF U HAVE ANY SUGGESTION @animalin_tm_empire"
+    for model in FREE_MODELS:
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                        "HTTP-Referer": "https://t.me/YOUR_CINDRELLABOT",
+                        "X-Title": "CINDRELLA-Bot"
+                    },
+                    json={
+                        "model": model,
+                        "messages": [SYSTEM_PROMPT, {"role": "user", "content": user_message}]
+                    }
+                )
+                data = res.json()
+                if "choices" in data:
+                    return data["choices"][0]["message"]["content"]
+        except Exception as e:
+            logger.warning(f"Model {model} failed: {e}")
+    return "I'm feeling a little tired right now. Please try again in a bit 💭💤"
 
-# Start command
+# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(
-        "HEY, I'M CINDRELLA 🌹🕯️. JOIN FOR BOT UPDATE AND GIVE US YOUR OPENION @animalin_tm_empire🌹🕯️.BTW WHAT'S GOING ON DEAR 🌹🕯️🕯️.?",
+        "HEY, I'M CINDRELLA 🌹🕯️. JOIN FOR BOT UPDATE AND GIVE US YOUR OPENION @animalin_tm_empire🌹🕯️.BTW WHAT'S GOING ON DEAR 🌹🕯️🕯️..??",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# Admin command
+# /admin
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in ADMINS:
@@ -90,7 +93,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     await update.message.reply_text("🔐 Admin Panel", reply_markup=InlineKeyboardMarkup(buttons))
 
-# Button callback
+# Admin buttons
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -109,7 +112,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "list_admins" and user_id == OWNER_ID:
         await query.message.reply_text("👮 Admins:\n" + "\n".join(str(a) for a in ADMINS))
 
-# Main message handler
+# Message handler
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     chat = update.effective_chat
@@ -122,12 +125,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         action = context.user_data.pop("action")
         if action == "broadcast":
             count = 0
-            for chat_id, data in context.application.chat_data.items():
+            for chat_id in context.application.chat_data.keys():
                 try:
                     await context.bot.send_message(chat_id=chat_id, text=text)
                     count += 1
                 except:
-                    continue
+                    pass
             await update.message.reply_text(f"📢 Broadcast sent to {count} chats.")
         elif action == "add_admin":
             try:
@@ -156,11 +159,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await context.bot.forward_message(admin_id, chat.id, update.message.message_id)
                 else:
                     msg_link = f"https://t.me/c/{str(chat.id)[4:]}/{update.message.message_id}"
-                    await context.bot.send_message(admin_id, f"📨 In group @{chat.username or 'unknown'} by @{update.effective_user.username or 'user'}:\n{msg_link}")
+                    await context.bot.send_message(
+                        admin_id,
+                        f"📨 In group @{chat.username or 'unknown'} by @{update.effective_user.username or 'user'}:\n{msg_link}"
+                    )
             except:
                 pass
 
-    # Reply logic
+    # Replies
     if chat.type in ["group", "supergroup"]:
         if text.lower() in ["hi", "hello", "hey", "heyy", "sup"]:
             await update.message.reply_text(random_greeting(), reply_to_message_id=update.message.message_id)
@@ -171,16 +177,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = await generate_reply(text)
         await update.message.reply_text(reply)
 
-# ✅ TELEGRAM BOT start
+# Run bot
 if __name__ == "__main__":
     app_bot = ApplicationBuilder().token(BOT_TOKEN).build()
     app_bot.add_handler(CommandHandler("start", start))
     app_bot.add_handler(CommandHandler("admin", admin_panel))
     app_bot.add_handler(CallbackQueryHandler(button_handler))
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
     app_bot.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
         webhook_url=WEBHOOK_URL,
-                                 )
+    )
