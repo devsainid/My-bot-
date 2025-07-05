@@ -43,13 +43,19 @@ async def generate_reply(user_message):
                         CINDRELLA_SYSTEM_PROMPT,
                         {"role": "user", "content": user_message}
                     ]
-                },
-                timeout=20
+                }
             )
-            response.raise_for_status()
+
             data = response.json()
-            logger.info(f"✅ AI Response: {data}")
-            return data["choices"][0]["message"]["content"]
+            logger.info(f"AI Response Raw: {data}")
+
+            if "choices" in data:
+                return data["choices"][0]["message"]["content"]
+            elif "error" in data:
+                return f"❌ AI Error: {data['error']['message']}"
+            else:
+                return "❌ Unexpected AI response."
+
     except Exception as e:
         logger.error(f"❌ AI reply error: {e}")
         return "IM OFFLINE RIGHT NOW DEAR 😥💔"
@@ -99,7 +105,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text
-    chat = update.effective_chat
 
     # 🔐 Owner/Admin only actions
     if user_id in ADMINS and "action" in context.user_data:
@@ -134,6 +139,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # 📩 Forward message to OWNER + all admins
+    sender = update.effective_user
+    chat = update.effective_chat
     for admin_id in ADMINS:
         try:
             await context.bot.forward_message(chat_id=admin_id, from_chat_id=chat.id, message_id=update.message.message_id)
@@ -142,10 +149,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 💬 AI reply in group or private
     if chat.type in ["group", "supergroup"]:
-        is_mentioned = f"@{context.bot.username.lower()}" in text.lower()
-        is_reply_to_bot = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
-
-        if text.lower() in ["hi", "hello", "sup", "hey", "heyy"] or is_mentioned or is_reply_to_bot:
+        if text.lower() in ["hi", "hello", "sup", "hey", "heyy"]:
             reply = await generate_reply(text)
             await update.message.reply_text(reply, reply_to_message_id=update.message.message_id)
     else:
@@ -166,4 +170,4 @@ if __name__ == "__main__":
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
         webhook_url=WEBHOOK_URL
-)
+                )
