@@ -140,15 +140,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
-    # 💬 AI reply in group or private
+# 💬 AI reply in group or private
     if chat.type in ["group", "supergroup"]:
-        if text.lower() in ["hi", "hello", "sup", "hey", "heyy"]:
+        if (
+            text.lower() in ["hi", "hello", "sup", "hey", "heyy"] or
+            update.message.reply_to_message or
+            f"@{context.bot.username.lower()}" in text.lower()
+        ):
             reply = await generate_reply(text)
             await update.message.reply_text(reply, reply_to_message_id=update.message.message_id)
     else:
         reply = await generate_reply(text)
         await update.message.reply_text(reply)
-
 # ✅ Main entry
 if __name__ == "__main__":
     application = ApplicationBuilder().token(BOT_TOKEN).build()
