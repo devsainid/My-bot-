@@ -68,7 +68,10 @@ async def generate_reply(user_message):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(
-        "HEY, I'M CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?",
+        "HEY, I'M CINDRELLA 🌹🕯️. JOIN FOR BOT UPDATE AND GIVE US YOUR OPENION @animalin_tm_empire🌹🕯️
+
+
+BTW WHAT'S GOING ON DEAR 🌹🕯️🕯️.?",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
