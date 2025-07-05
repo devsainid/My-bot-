@@ -54,7 +54,7 @@ async def generate_reply(user_message):
                     "X-Title": "CINDRELLA-Bot"
                 },
                 json={
-                    "model": "openrouter/cypher-alpha:free",
+                    "model": "gryphe/mythomax-l2:free",
                     "messages": [SYSTEM_PROMPT, {"role": "user", "content": user_message}]
                 }
             )
