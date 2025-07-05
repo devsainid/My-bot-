@@ -90,14 +90,14 @@ async def generate_reply(user_message):
                     return data["choices"][0]["message"]["content"]
         except Exception as e:
             logger.warning(f"Model {model} failed: {e}")
-    return "I'm feeling a little tired right now. Please try again in a bit 💭💤"
+    return "MY DEVELOPER IS TRYING TO UPDATE ME IF U HAVE ANY OPENION SO REPORT US HERE ✨ @animalin_tm_empire"
 
 # ✅ Start Command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_known_chat(update.effective_chat.id)
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(
-        "HEY, I'M CINDRELLA 🌹🔯. JOIN FOR BOT UPDATE AND GIVE US YOUR OPENION @animalin_tm_empire🌹🔯.BTW WHAT'S GOING ON DEAR 🌹🔯🔯..??",
+        "HEY, I'M CINDRELLA 🌹🕯️🕯️. JOIN FOR BOT UPDATE AND GIVE US YOUR OPENION @animalin_tm_empire 🌹🕯️🕯️.BTW WHAT'S GOING ON DEAR 🌹🕯️🕯️..??",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
