@@ -117,10 +117,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in ADMINS and "action" in context.user_data:
         action = context.user_data.pop("action")
         if action == "broadcast":
-            for chat_id in context.application.chat_data.keys():
-                try: await context.bot.send_message(chat_id=chat_id, text=text)
-                except: pass
-            await update.message.reply_text("📢 Broadcast sent.")
+            count = 0
+            for chat_id, data in context.application.chat_data.items():
+                try:
+                    await context.bot.send_message(chat_id=chat_id, text=text)
+                    count += 1
+                except:
+                    continue
+            await update.message.reply_text(f"📢 Broadcast sent to {count} chats.")
         elif action == "add_admin":
             try:
                 new_admin = int(text.strip())
@@ -149,7 +153,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     msg_link = f"https://t.me/c/{str(chat.id)[4:]}/{update.message.message_id}"
                     await context.bot.send_message(admin_id, f"📨 In group @{chat.username or 'unknown'} by @{update.effective_user.username or 'user'}:\n{msg_link}")
-            except: pass
+            except:
+                pass
 
     # Reply logic
     if chat.type in ["group", "supergroup"]:
@@ -162,7 +167,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = await generate_reply(text)
         await update.message.reply_text(reply)
 
-# ✅ TELEGRAM BOT start (ONLY - Removed Flask run_webhook conflict)
+# ✅ TELEGRAM BOT start
 if __name__ == "__main__":
     app_bot = ApplicationBuilder().token(BOT_TOKEN).build()
     app_bot.add_handler(CommandHandler("start", start))
@@ -170,9 +175,8 @@ if __name__ == "__main__":
     app_bot.add_handler(CallbackQueryHandler(button_handler))
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # ✅ Only run telegram webhook (Flask conflict removed)
     app_bot.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
         webhook_url=WEBHOOK_URL,
-        )
+                                 )
