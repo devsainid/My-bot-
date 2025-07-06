@@ -8,9 +8,15 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN") OWNER_ID = int(os.environ.get("OWNER_ID"
 
 logging.basicConfig(level=logging.INFO) logger = logging.getLogger(name)
 
-✅ Admins
+✅ Admins file
 
-ADMINS = set([OWNER_ID])
+ADMINS_FILE = "admins.json"
+
+try: import json if os.path.exists(ADMINS_FILE): with open(ADMINS_FILE, "r") as f: ADMINS = set(json.load(f)) else: ADMINS = set([OWNER_ID]) except: ADMINS = set([OWNER_ID])
+
+✅ Save admins
+
+def save_admins(): with open(ADMINS_FILE, "w") as f: json.dump(list(ADMINS), f)
 
 ✅ Known chats
 
@@ -28,7 +34,7 @@ SYSTEM_PROMPT = { "role": "system", "content": "You are CINDRELLA, a 16-year-old
 
 FREE_MODELS = [ "openrouter/cypher-alpha:free", "gryphe/mythomax-l2-13b", "mistralai/mistral-7b-instruct:free", "intel/neural-chat-7b" ]
 
-GREETINGS = [ "Hey, how can I help you?", "Hi, what's going on?", "Hello there, all good?", "Hey, what’s up?", "Hi, need anything?" ]
+GREETINGS = [ "Hey there! How can I help you?", "Hi there 🌸 What's up?", "Hello love 💖 I'm here!", "Hey dear, how are you feeling?", "Hi 🌷 Need anything from me?" ]
 
 CONVO_START_WORDS = ["hi", "hello", "hey", "heyy", "sup", "good morning", "good night", "gm", "gn"]
 
@@ -65,7 +71,47 @@ if user.id in ADMINS and "action" in context.user_data:
         await update.message.reply_text(f"📢 Broadcast sent to {count} chats.")
     elif action == "add_admin":
         try:
-            ADMINS.add(int(text.strip()))
+            new_admin = int(text.strip())
+            ADMINS.add(new_admin)
+            save_admins()
             await update.message.reply_text("✅ Admin added.")
         except:
-            await update.message
+            await update.message.reply_text("❌ Invalid ID.")
+    elif action == "remove_admin":
+        try:
+            ADMINS.remove(int(text.strip()))
+            save_admins()
+            await update.message.reply_text("✅ Admin removed.")
+        except:
+            await update.message.reply_text("❌ Not found.")
+    elif action == "list_admins":
+        await update.message.reply_text("👮 Admins:\n" + "\n".join(str(a) for a in ADMINS))
+    return
+
+# ✅ Forward message to admins
+for admin in ADMINS:
+    try:
+        if chat.type == "private":
+            await context.bot.forward_message(admin, chat.id, update.message.message_id)
+        else:
+            msg_link = f"https://t.me/c/{str(chat.id)[4:]}/{update.message.message_id}"
+            await context.bot.send_message(admin, f"📨 @{chat.username or 'unknown'} | @{user.username or 'user'}:\n{msg_link}")
+    except:
+        pass
+
+# ✅ AI Reply
+lowered = text.lower().strip()
+if chat.type in ["group", "supergroup"]:
+    if (lowered in CONVO_START_WORDS or any(lowered.startswith(w) for w in CONVO_START_WORDS)):
+        reply = await generate_reply(text)
+        await update.message.reply_text(reply, reply_to_message_id=update.message.message_id)
+    elif is_mention or is_reply:
+        reply = await generate_reply(text)
+        await update.message.reply_text(reply, reply_to_message_id=update.message.message_id)
+elif chat.type == "private":
+    reply = await generate_reply(text)
+    await update.message.reply_text(reply)
+
+✅ Webhook
+
+if name == 'main': app = ApplicationBuilder().token(BOT_TOKEN).build() app.add_handler(CommandHandler("start", start)) app.add_handler(CommandHandler("admin", admin_panel)) app.add_handler(CallbackQueryHandler(button_handler)) app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)) app.run_webhook( listen="0.0.0.0", port=PORT, webhook_url=WEBHOOK_URL )
