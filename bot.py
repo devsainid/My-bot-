@@ -1,4 +1,4 @@
-import os import logging import random import httpx from langdetect import detect from flask import Flask, request from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup from telegram.ext import ( ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters )
+import os import logging import random import httpx from flask import Flask, request from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup from telegram.ext import ( ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters )
 
 ✅ ENV Variables
 
@@ -24,19 +24,19 @@ known_chats = load_known_chats()
 
 ✅ Prompt
 
+SYSTEM_PROMPT = { "role": "system", "content": "You are CINDRELLA, a 16-year-old sweet, kind and emotionally intelligent girl. You respond like a real person and connect emotionally like a best friend. Reply in few natural words." }
+
 FREE_MODELS = [ "openrouter/cypher-alpha:free", "gryphe/mythomax-l2-13b", "mistralai/mistral-7b-instruct:free", "intel/neural-chat-7b" ]
 
-GREETINGS = [ "Hey there! wait?", "Hi, what's going on?", "Hello dear, I'm listening.", "Hey, how are you feeling?", "Hi, anything you want to share?" ]
+GREETINGS = [ "Hey, how can I help you?", "Hi, what's going on?", "Hello there, all good?", "Hey, what’s up?", "Hi, need anything?" ]
 
 CONVO_START_WORDS = ["hi", "hello", "hey", "heyy", "sup", "good morning", "good night", "gm", "gn"]
 
 def random_greeting(): return random.choice(GREETINGS)
 
-def build_system_prompt(language): return { "role": "system", "content": f"You are CINDRELLA, a sweet, kind, emotionally intelligent 16-year-old girl. Always reply in {language}. Keep replies short, natural, emotionally caring, like a real human best friend." }
-
 ✅ AI Generator
 
-async def generate_reply(user_message): language = detect(user_message) system_prompt = build_system_prompt(language) for model in FREE_MODELS: try: async with httpx.AsyncClient() as client: res = await client.post( "https://openrouter.ai/api/v1/chat/completions", headers={ "Authorization": f"Bearer {OPENROUTER_API_KEY}", "HTTP-Referer": "https://t.me/YOUR_CINDRELLABOT", "X-Title": "CINDRELLA-Bot" }, json={ "model": model, "messages": [system_prompt, {"role": "user", "content": user_message}] } ) data = res.json() if "choices" in data: return data["choices"][0]["message"]["content"] except Exception as e: logger.warning(f"Model {model} failed: {e}") return "My developer is updating me, share feedback at @animalin_tm_empire 🌹🕯️"
+async def generate_reply(user_message): for model in FREE_MODELS: try: async with httpx.AsyncClient() as client: res = await client.post( "https://openrouter.ai/api/v1/chat/completions", headers={ "Authorization": f"Bearer {OPENROUTER_API_KEY}", "HTTP-Referer": "https://t.me/YOUR_CINDRELLABOT", "X-Title": "CINDRELLA-Bot" }, json={ "model": model, "messages": [SYSTEM_PROMPT, {"role": "user", "content": user_message}] } ) data = res.json() if "choices" in data: return data["choices"][0]["message"]["content"] except Exception as e: logger.warning(f"Model {model} failed: {e}") return "My developer is updating me, share feedback at @animalin_tm_empire 🌹🕯️"
 
 ✅ Commands
 
@@ -48,7 +48,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE): qu
 
 ✅ Messages
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE): chat = update.effective_chat user = update.effective_user text = update.message.text or "" is_reply = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id is_mention = f"@{context.bot.username.lower()}" in text.lower() text_lower = text.lower()
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE): chat = update.effective_chat user = update.effective_user text = update.message.text or "" is_reply = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id is_mention = f"@{context.bot.username.lower()}" in text.lower()
 
 save_known_chat(chat.id)
 
@@ -68,39 +68,4 @@ if user.id in ADMINS and "action" in context.user_data:
             ADMINS.add(int(text.strip()))
             await update.message.reply_text("✅ Admin added.")
         except:
-            await update.message.reply_text("❌ Invalid ID.")
-    elif action == "remove_admin":
-        try:
-            ADMINS.remove(int(text.strip()))
-            await update.message.reply_text("✅ Admin removed.")
-        except:
-            await update.message.reply_text("❌ Not found.")
-    elif action == "list_admins":
-        await update.message.reply_text("👮 Admins:\n" + "\n".join(str(a) for a in ADMINS))
-    return
-
-# ✅ Forward message to admins
-for admin in ADMINS:
-    try:
-        if chat.type == "private":
-            await context.bot.forward_message(admin, chat.id, update.message.message_id)
-        else:
-            msg_link = f"https://t.me/c/{str(chat.id)[4:]}/{update.message.message_id}"
-            await context.bot.send_message(admin, f"📨 @{chat.username or 'unknown'} | @{user.username or 'user'}:\n{msg_link}")
-    except:
-        pass
-
-# ✅ AI Reply Logic
-if chat.type in ["group", "supergroup"]:
-    if any(text_lower.startswith(w) for w in CONVO_START_WORDS) and not (is_reply or is_mention):
-        await update.message.reply_text(random_greeting(), reply_to_message_id=update.message.message_id)
-    elif is_reply or is_mention:
-        reply = await generate_reply(text)
-        await update.message.reply_text(reply, reply_to_message_id=update.message.message_id)
-elif chat.type == "private":
-    reply = await generate_reply(text)
-    await update.message.reply_text(reply)
-
-✅ Webhook
-
-if name == 'main': app = ApplicationBuilder().token(BOT_TOKEN).build() app.add_handler(CommandHandler("start", start)) app.add_handler(CommandHandler("admin", admin_panel)) app.add_handler(CallbackQueryHandler(button_handler)) app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)) app.run_webhook( listen="0.0.0.0", port=PORT, webhook_url=WEBHOOK_URL )1q
+            await update.message
