@@ -1,47 +1,49 @@
 import os
 import logging
 import random
-import json
 import httpx
+import json
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ContextTypes, filters
+    ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler,
+    ContextTypes, filters
 )
 
+# ✅ ENV Variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = int(os.environ.get("OWNER_ID", "6559745280"))
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 PORT = int(os.environ.get("PORT", 10000))
 
+# ✅ Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ✅ Admins file
 ADMINS_FILE = "admins.json"
-KNOWN_CHATS_FILE = "known_chats.txt"
-
-# ✅ Admins load
-if os.path.exists(ADMINS_FILE):
-    try:
+try:
+    if os.path.exists(ADMINS_FILE):
         with open(ADMINS_FILE, "r") as f:
             ADMINS = set(json.load(f))
-    except:
+    else:
         ADMINS = set([OWNER_ID])
-else:
+except:
     ADMINS = set([OWNER_ID])
 
+# ✅ Save admins
 def save_admins():
     with open(ADMINS_FILE, "w") as f:
         json.dump(list(ADMINS), f)
 
 # ✅ Known chats
-if os.path.exists(KNOWN_CHATS_FILE):
-    with open(KNOWN_CHATS_FILE, "r") as f:
-        known_chats = set(int(line.strip()) for line in f if line.strip().isdigit())
-else:
-    known_chats = set()
+KNOWN_CHATS_FILE = "known_chats.txt"
+def load_known_chats():
+    if os.path.exists(KNOWN_CHATS_FILE):
+        with open(KNOWN_CHATS_FILE, "r") as f:
+            return set(int(line.strip()) for line in f if line.strip().isdigit())
+    return set()
 
 def save_known_chat(chat_id):
     if chat_id not in known_chats:
@@ -49,10 +51,12 @@ def save_known_chat(chat_id):
         with open(KNOWN_CHATS_FILE, "a") as f:
             f.write(str(chat_id) + "\n")
 
-# ✅ Prompt and greetings
+known_chats = load_known_chats()
+
+# ✅ Prompt
 SYSTEM_PROMPT = {
     "role": "system",
-    "content": "You are CINDRELLA, a 16-year-old sweet, kind and emotionally intelligent girl. You respond like a real person and connect emotionally like a best friend. Reply in few natural words."
+    "content": "You are CINDRELLA, a 16-year-old sweet, kind and emotionally intelligent girl. You respond like a real person and connect emotionally like a best friend. Reply in few natural words. Mention your creator dev if asked."
 }
 
 FREE_MODELS = [
@@ -62,21 +66,10 @@ FREE_MODELS = [
     "intel/neural-chat-7b"
 ]
 
-OWNER_RESPONSES = [
-    "My creator is dev 💖",
-    "The one who made me is dev 🧠",
-    "dev is my sweet owner 💫",
-    "I'm made with love by dev 🌸",
-    "All thanks to dev, my creator 🌟"
-]
+CONVO_START_WORDS = ["hi", "hello", "hey", "heyy", "sup", "good morning", "good night", "gm", "gn"]
 
-CONVO_START_WORDS = ["hi", "hello", "hey", "heyy", "sup", "gm", "gn", "what's up", "what", "who are you"]
-
-# ✅ AI Response
+# ✅ AI Generator
 async def generate_reply(user_message):
-    if "owner" in user_message.lower():
-        return random.choice(OWNER_RESPONSES)
-
     for model in FREE_MODELS:
         try:
             async with httpx.AsyncClient() as client:
@@ -97,14 +90,14 @@ async def generate_reply(user_message):
                     return data["choices"][0]["message"]["content"]
         except Exception as e:
             logger.warning(f"Model {model} failed: {e}")
-    return "I'm having trouble replying right now 💔. Try again later."
+    return "My developer is updating me, share feedback at @animalin_tm_empire 🌹🕯️"
 
 # ✅ Commands
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_known_chat(update.effective_chat.id)
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(
-        "HEY, I'M CINDRELLA 🌹🕯️. JOIN FOR UPDATES & DROP FEEDBACK @animalin_tm_empire 🌹🕯️. HOW YOU FOUND ME DEAR?",
+        "HEY, I'M CINDRELLA 🌹🕯️🕯️. JOIN FOR UPDATES & DROP FEEDBACK @animalin_tm_empire 🌹🕯️🕯️. WHAT'S UP DEAR?",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -122,8 +115,9 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    user_id = query.from_user.id
     await query.answer()
-    if query.from_user.id not in ADMINS:
+    if user_id not in ADMINS:
         return
     context.user_data["action"] = query.data
     await query.message.reply_text("Send me the input now.")
@@ -134,8 +128,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text or ""
     lowered = text.lower().strip()
+
+    # ✅ Bot Mention Detection
+    bot_username = context.bot.username.lower()
+    is_mention = any(
+        e.type == "mention" and update.message.text[e.offset:e.offset + e.length].lower() == f"@{bot_username}"
+        for e in (update.message.entities or [])
+    )
+
     is_reply = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
-    is_mention = f"@{context.bot.username.lower()}" in lowered
 
     save_known_chat(chat.id)
 
@@ -147,7 +148,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 try:
                     await context.bot.send_message(cid, text)
                     count += 1
-                except: pass
+                except:
+                    pass
             await update.message.reply_text(f"📢 Broadcast sent to {count} chats.")
         elif action == "add_admin":
             try:
@@ -168,28 +170,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("👮 Admins:\n" + "\n".join(str(a) for a in ADMINS))
         return
 
-    # ✅ Forward all messages
+    # ✅ Forward message to admins
     for admin in ADMINS:
         try:
             if chat.type == "private":
                 await context.bot.forward_message(admin, chat.id, update.message.message_id)
-            elif chat.type in ["group", "supergroup"]:
+            else:
                 msg_link = f"https://t.me/c/{str(chat.id)[4:]}/{update.message.message_id}"
                 await context.bot.send_message(admin, f"📨 @{chat.username or 'unknown'} | @{user.username or 'user'}:\n{msg_link}")
         except:
             pass
 
-    # ✅ Respond
-    if chat.type == "private":
-        reply = await generate_reply(text)
-        await update.message.reply_text(reply)
-    elif chat.type in ["group", "supergroup"]:
-        if any(word in lowered for word in CONVO_START_WORDS) or is_reply or is_mention:
+    # ✅ AI Reply Logic
+    if chat.type in ["group", "supergroup"]:
+        if is_reply or is_mention:
             reply = await generate_reply(text)
             await update.message.reply_text(reply, reply_to_message_id=update.message.message_id)
+        elif not update.message.reply_to_message and any(lowered.startswith(w) for w in CONVO_START_WORDS):
+            reply = await generate_reply(text)
+            await update.message.reply_text(reply, reply_to_message_id=update.message.message_id)
+    elif chat.type == "private":
+        reply = await generate_reply(text)
+        await update.message.reply_text(reply)
 
 # ✅ Webhook
-if __name__ == "__main__":
+if __name__ == '__main__':
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_panel))
