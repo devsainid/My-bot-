@@ -1,6 +1,3 @@
-import os
-import logging
-import random
 import httpx
 import json
 from flask import Flask, request
@@ -29,13 +26,13 @@ if os.path.exists(ADMINS_FILE):
 else:
     ADMINS = set([OWNER_ID])
 
-# ✅ Save admins
 def save_admins():
     with open(ADMINS_FILE, "w") as f:
         json.dump(list(ADMINS), f)
 
 # ✅ Known chats
 KNOWN_CHATS_FILE = "known_chats.txt"
+
 def load_known_chats():
     if os.path.exists(KNOWN_CHATS_FILE):
         with open(KNOWN_CHATS_FILE, "r") as f:
@@ -53,12 +50,7 @@ known_chats = load_known_chats()
 # ✅ Prompt
 SYSTEM_PROMPT = {
     "role": "system",
-    "content": (
-        "You are CINDRELLA, a 16-year-old kind, respectful, emotionally intelligent girl. "
-        "You always reply briefly, politely, and in the user's language. Never flirt, never use romantic emojis. "
-        "Be like a real human with soft, helpful tone. Avoid giving long paragraphs. "
-        "If someone uses abusive words, ignore or gently say 'Please be respectful'."
-    )
+    "content": "You are CINDRELLA, a 16-year-old sweet, kind and  intelligent girl. You respond like a real person and like a best friend. Keep your replies short, warm and human. your owner is dev "
 }
 
 FREE_MODELS = [
@@ -68,23 +60,8 @@ FREE_MODELS = [
     "intel/neural-chat-7b"
 ]
 
-GREETINGS = [
-    "Hey there! How can I help you?",
-    "Hi there 🌸 What's up?",
-    "Hello, I'm here for you!",
-    "Hey dear, how are you feeling?",
-    "Hi 🌷 Need anything from me?"
-]
-
-CONVO_START_WORDS = ["hi", "hello", "hey", "heyy", "sup", "good morning", "good night", "gm", "gn"]
-
-BAD_WORDS = ["betichod", "madarchod", "bhosdi", "gandu", "randi", "chutiya", "mc", "bc"]
-
-def random_greeting():
-    return random.choice(GREETINGS)
-
-def contains_bad_words(text):
-    return any(bad in text.lower() for bad in BAD_WORDS)
+GREETINGS = ["hi", "hello", "hey", "heyy", "sup", "gm", "gn", "good morning", "good night"]
+BAD_WORDS = ["bkl", "mc", "bc", "bhosdi", "lund", "chut", "gand", "madarchod", "betichod", "randi"]
 
 # ✅ AI Generator
 async def generate_reply(user_message):
@@ -108,14 +85,14 @@ async def generate_reply(user_message):
                     return data["choices"][0]["message"]["content"]
         except Exception as e:
             logger.warning(f"Model {model} failed: {e}")
-    return "My developer is updating me, share feedback at @animalin_tm_empire 🌹🕯️"
+    return "I'm here, but feeling a little sleepy... 💤"
 
 # ✅ Commands
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_known_chat(update.effective_chat.id)
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(
-        "HEY, I'M CINDRELLA 🌹🕯️🕯️. JOIN FOR UPDATES & DROP FEEDBACK @animalin_tm_empire 🌹🕯️🕯️. WHAT'S UP DEAR?",
+        "HEY, I'M CINDRELLA 🌹🕯️. JOIN FOR UPDATES & DROP FEEDBACK @animalin_tm_empire 🌹🕯️. WHAT'S UP DEAR?",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -146,8 +123,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text or ""
     lowered = text.lower().strip()
-
-    is_reply_to_bot = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
+    is_reply = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
     is_mention = f"@{context.bot.username.lower()}" in lowered
 
     save_known_chat(chat.id)
@@ -193,16 +169,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
-    if contains_bad_words(text):
-        await update.message.reply_text("Please dear be respectful 😭😭 its herted me too much", reply_to_message_id=update.message.message_id)
+    # ✅ Handle bad words
+    if any(bad in lowered for bad in BAD_WORDS):
+        await update.message.reply_text("Please be respectful.", reply_to_message_id=update.message.message_id)
         return
 
-    # ✅ AI Reply in groups and private
+    # ✅ Reply if tagged, replied, or greeting
     if chat.type in ["group", "supergroup"]:
-        if (lowered in CONVO_START_WORDS or any(lowered.startswith(w) for w in CONVO_START_WORDS)):
-            reply = await generate_reply(text)
-            await update.message.reply_text(reply, reply_to_message_id=update.message.message_id)
-        elif is_reply_to_bot or is_mention:
+        if is_mention or is_reply or lowered in GREETINGS or any(lowered.startswith(w) for w in GREETINGS):
             reply = await generate_reply(text)
             await update.message.reply_text(reply, reply_to_message_id=update.message.message_id)
     elif chat.type == "private":
