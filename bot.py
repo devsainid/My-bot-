@@ -6,6 +6,7 @@ import json
 from datetime import datetime
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatMember
+from telegram.constants import ChatAction
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler,
     ContextTypes, filters
@@ -53,12 +54,12 @@ def save_known_chat(chat_id):
             f.write(str(chat_id) + "\n")
 
 known_chats = load_known_chats()
-usage_counter = {}
+today_count = 0
 
 # ✅ Prompt
 SYSTEM_PROMPT = {
     "role": "system",
-    "content": "You are CINDRELLA, a 15-year-old super-intelligent, sharp-witted, and emotionally aware girl. You speak like a real human — smart, confident, and a little flirty. You never sound robotic or boring. You read the user's mood and respond accordingly — playful when they’re joking, caring when they’re down, and bold when needed. You never repeat yourself and always keep the conversation fun, clever, and unpredictable with real attitude and quick comebacks. You flirt naturally but never get romantic. You always reply in the same language the user is chatting in. Your boyfriend, developer, owner, and programmer — is one person: DEV. Whatever someone asks about you — your creator, your crush, your everything — the answer is always: DEV. always reply in few natural words."
+    "content": "You are CINDRELLA, a 15- year-old super-intelligent, sharp-witted, and emotionally aware girl. You speak like a real human — smart, confident, and a little flirty. You never sound robotic or boring. You read the user's mood and respond accordingly — playful when they’re joking, caring when they’re down, and bold when needed. You never repeat yourself and always keep the conversation fun, clever, and unpredictable with real attitude and quick comebacks. You flirt naturally but never get romantic. You always reply in the same language the user is chatting in. Your boyfriend, developer, owner, and programmer — is one person: DEV. Whatever someone asks about you — your creator, your crush, your everything — the answer is always: DEV. Always reply in few natural word."
 }
 
 FREE_MODELS = [
@@ -68,21 +69,13 @@ FREE_MODELS = [
     "intel/neural-chat-7b"
 ]
 
-GREETINGS = [
-    "Hey there! How can I help you?",
-    "Hi there 🌸 What's up?",
-    "Hello love 💖 I'm here!",
-    "Hey dear, how are you feeling?",
-    "Hi 🌷 Need anything from me?"
-]
+GREETINGS = ["hi", "hello", "hey", "heyy", "sup", "good morning", "good night", "gm", "gn"]
 
-CONVO_START_WORDS = ["hi", "hello", "hey", "heyy", "sup", "good morning", "good night", "gm", "gn"]
+def is_greeting(text):
+    return any(text.lower().startswith(g) for g in GREETINGS)
 
-def random_greeting():
-    return random.choice(GREETINGS)
-
-# ✅ AI Generator
 async def generate_reply(user_message):
+    global today_count
     for model in FREE_MODELS:
         try:
             async with httpx.AsyncClient() as client:
@@ -100,23 +93,21 @@ async def generate_reply(user_message):
                 )
                 data = res.json()
                 if "choices" in data:
-                    date = datetime.now().strftime('%Y-%m-%d')
-                    usage_counter[date] = usage_counter.get(date, 0) + 1
+                    today_count += 1
                     return data["choices"][0]["message"]["content"]
         except Exception as e:
             logger.warning(f"Model {model} failed: {e}")
-    return "My developer is updating me, share feedback at @animalin_tm_empire 🌹🕯️"
+    return "My dev is fixing things 💫 Try again later."
 
-# ✅ Start Command
+# ✅ Commands
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_known_chat(update.effective_chat.id)
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(
-        "HEY, I'M CINDRELLA 🌹🕯️🕯️. JOIN FOR UPDATES & DROP FEEDBACK @animalin_tm_empire 🌹🕯️🕯️. WHAT'S UP DEAR?",
+        "Hey, I'm CINDRELLA 🌹 What's up, cutie?",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ✅ Admin Panel
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS:
         return
@@ -126,7 +117,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("➕ Add Admin", callback_data="add_admin")],
             [InlineKeyboardButton("➖ Remove Admin", callback_data="remove_admin")],
             [InlineKeyboardButton("📋 List Admins", callback_data="list_admins")],
-            [InlineKeyboardButton("📈 Today Usage", callback_data="usage_today")]
+            [InlineKeyboardButton("📈 Today Usage", callback_data="usage")]
         ]
     await update.message.reply_text("🔐 Admin Panel", reply_markup=InlineKeyboardMarkup(buttons))
 
@@ -136,23 +127,44 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     if user_id not in ADMINS:
         return
-    if query.data == "usage_today":
-        today = datetime.now().strftime('%Y-%m-%d')
-        count = usage_counter.get(today, 0)
-        await query.message.reply_text(f"📊 Today AI replies: {count}")
+    action = query.data
+    context.user_data["action"] = action
+    if action == "usage":
+        await query.message.reply_text(f"Today I've replied to {today_count} messages 🌟")
     else:
-        context.user_data["action"] = query.data
         await query.message.reply_text("Send me the input now.")
 
-# ✅ Permission Check
-async def is_admin(chat, user_id, context):
+# ✅ Admin Group Commands
+async def group_admin_commands(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        return
+    command = update.message.text.split()[0].lower()
+    if not update.message.reply_to_message:
+        await update.message.reply_text("Please reply to a message to use this command.")
+        return
+    target = update.message.reply_to_message.from_user.id
     try:
-        member = await context.bot.get_chat_member(chat.id, user_id)
-        return member.status in [ChatMember.ADMINISTRATOR, ChatMember.OWNER]
-    except:
-        return False
+        if command == "/kick":
+            await context.bot.ban_chat_member(update.effective_chat.id, target)
+            await context.bot.unban_chat_member(update.effective_chat.id, target)
+            await update.message.reply_text("User kicked.")
+        elif command == "/ban":
+            await context.bot.ban_chat_member(update.effective_chat.id, target)
+            await update.message.reply_text("User banned.")
+        elif command == "/unban":
+            await context.bot.unban_chat_member(update.effective_chat.id, target)
+            await update.message.reply_text("User unbanned.")
+        elif command == "/pin":
+            await context.bot.pin_chat_message(update.effective_chat.id, update.message.reply_to_message.message_id)
+            await update.message.reply_text("Message pinned.")
+        elif command == "/unpin":
+            await context.bot.unpin_chat_message(update.effective_chat.id)
+            await update.message.reply_text("Message unpinned.")
+        elif command == "/skip":
+            await update.message.reply_text("Skipped.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {e}")
 
-# ✅ Messages
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     user = update.effective_user
@@ -175,8 +187,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"📢 Broadcast sent to {count} chats.")
         elif action == "add_admin":
             try:
-                new_admin = int(text.strip())
-                ADMINS.add(new_admin)
+                ADMINS.add(int(text.strip()))
                 save_admins()
                 await update.message.reply_text("✅ Admin added.")
             except:
@@ -192,46 +203,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("👮 Admins:\n" + "\n".join(str(a) for a in ADMINS))
         return
 
-    # ✅ Moderation Commands (only if bot is admin in group)
-    if chat.type in ["group", "supergroup"] and update.message.text.startswith("/"):
-        cmd = text.split()
-        admin_ok = user.id in ADMINS or await is_admin(chat, user.id, context)
-        bot_admin = await is_admin(chat, context.bot.id, context)
-        if admin_ok and bot_admin:
-            if cmd[0] == "/ban" and len(cmd) > 1:
-                try:
-                    user_id = cmd[1].replace("@", "")
-                    member = await context.bot.get_chat_member(chat.id, user_id)
-                    await context.bot.ban_chat_member(chat.id, member.user.id)
-                    await update.message.reply_text("✅ Banned")
-                except:
-                    pass
-            elif cmd[0] == "/mute" and len(cmd) > 1:
-                try:
-                    user_id = cmd[1].replace("@", "")
-                    member = await context.bot.get_chat_member(chat.id, user_id)
-                    await context.bot.restrict_chat_member(chat.id, member.user.id, permissions={})
-                    await update.message.reply_text("🔇 Muted")
-                except:
-                    pass
-
-    # ✅ Forward if mentioned or reply only
+    # ✅ Forward tagged/replied messages only
     if chat.type != "private":
         if is_mention or is_reply:
-            for admin in ADMINS:
-                try:
-                    msg_link = f"https://t.me/c/{str(chat.id)[4:]}/{update.message.message_id}"
+            try:
+                msg_link = f"https://t.me/c/{str(chat.id)[4:]}/{update.message.message_id}"
+                for admin in ADMINS:
                     await context.bot.send_message(admin, f"📨 @{chat.username or 'unknown'} | @{user.username or 'user'}:\n{msg_link}")
-                except:
-                    pass
+            except:
+                pass
 
-    # ✅ AI Reply
+    # ✅ AI Reply Conditions
     lowered = text.lower().strip()
     if chat.type in ["group", "supergroup"]:
-        if any(word in lowered for word in CONVO_START_WORDS) and not update.message.reply_to_message:
-            reply = await generate_reply(text)
-            await update.message.reply_text(reply, reply_to_message_id=update.message.message_id)
-        elif is_mention or is_reply:
+        if (not update.message.reply_to_message and not is_mention and is_greeting(lowered)) or is_mention or is_reply:
             reply = await generate_reply(text)
             await update.message.reply_text(reply, reply_to_message_id=update.message.message_id)
     elif chat.type == "private":
@@ -244,9 +229,10 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_panel))
     app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(CommandHandler(["kick", "ban", "unban", "pin", "unpin", "skip"], group_admin_commands))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
         webhook_url=WEBHOOK_URL
-    )
+            )
