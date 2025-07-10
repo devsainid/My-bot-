@@ -55,6 +55,7 @@ def save_known_chat(chat_id):
 
 known_chats = load_known_chats()
 today_count = 0
+welcome_messages = {}
 
 # ✅ Prompt
 SYSTEM_PROMPT = {
@@ -134,37 +135,23 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await query.message.reply_text("Send me the input now.")
 
-# ✅ Admin Group Commands
-async def group_admin_commands(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ✅ Welcome Message
+async def set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS:
         return
-    command = update.message.text.split()[0].lower()
-    if not update.message.reply_to_message:
-        await update.message.reply_text("Please reply to a message to use this command.")
+    if len(context.args) < 1:
+        await update.message.reply_text("Usage: /setwelcome Your welcome message")
         return
-    target = update.message.reply_to_message.from_user.id
-    try:
-        if command == "/kick":
-            await context.bot.ban_chat_member(update.effective_chat.id, target)
-            await context.bot.unban_chat_member(update.effective_chat.id, target)
-            await update.message.reply_text("User kicked.")
-        elif command == "/ban":
-            await context.bot.ban_chat_member(update.effective_chat.id, target)
-            await update.message.reply_text("User banned.")
-        elif command == "/unban":
-            await context.bot.unban_chat_member(update.effective_chat.id, target)
-            await update.message.reply_text("User unbanned.")
-        elif command == "/pin":
-            await context.bot.pin_chat_message(update.effective_chat.id, update.message.reply_to_message.message_id)
-            await update.message.reply_text("Message pinned.")
-        elif command == "/unpin":
-            await context.bot.unpin_chat_message(update.effective_chat.id)
-            await update.message.reply_text("Message unpinned.")
-        elif command == "/skip":
-            await update.message.reply_text("Skipped.")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {e}")
+    welcome_messages[update.effective_chat.id] = " ".join(context.args)
+    await update.message.reply_text("✅ Welcome message set.")
 
+async def greet_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    for member in update.message.new_chat_members:
+        if chat_id in welcome_messages:
+            await update.message.reply_text(welcome_messages[chat_id])
+
+# ✅ Forward Message Only When Tagged/Reply
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     user = update.effective_user
@@ -200,7 +187,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except:
                 await update.message.reply_text("❌ Not found.")
         elif action == "list_admins":
-            await update.message.reply_text("👮 Admins:\n" + "\n".join(str(a) for a in ADMINS))
+            result = []
+            for a in ADMINS:
+                try:
+                    user = await context.bot.get_chat(a)
+                    result.append(f"{user.full_name} (@{user.username}) — `{a}`")
+                except:
+                    result.append(f"{a}")
+            await update.message.reply_text("👮 Admins:\n" + "\n".join(result), parse_mode="Markdown")
         return
 
     # ✅ Forward tagged/replied messages only
@@ -223,16 +217,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = await generate_reply(text)
         await update.message.reply_text(reply)
 
+async def handle_group_join(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    save_known_chat(update.effective_chat.id)
+
 # ✅ Webhook
 if __name__ == '__main__':
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_panel))
+    app.add_handler(CommandHandler("setwelcome", set_welcome))
     app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(CommandHandler(["kick", "ban", "unban", "pin", "unpin", "skip"], group_admin_commands))
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, greet_new_member))
+    app.add_handler(MessageHandler(filters.StatusUpdate.MY_CHAT_MEMBER, handle_group_join))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
         webhook_url=WEBHOOK_URL
-            )
+)
