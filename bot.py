@@ -1,4 +1,3 @@
-
 import os
 import logging
 import httpx
@@ -19,7 +18,8 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 PORT = int(os.environ.get("PORT", "8080"))
 
-app = ApplicationBuilder().token(BOT_TOKEN).build()
+telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
+flask_app = Flask(__name__)
 
 admins = [OWNER_ID]
 known_chats = set()
@@ -29,13 +29,11 @@ try:
 except:
     pass
 
-# SYSTEM PROMPT
 SYSTEM_PROMPT = {
     "role": "system",
     "content": "You are CINDRELLA, a 16-year-old girl. You are sweet, kind, emotionally intelligent and speak only English. You talk like a real person and connect emotionally like a best friend."
 }
 
-# AI Chat
 async def chat_with_ai(message):
     try:
         async with httpx.AsyncClient() as client:
@@ -51,14 +49,12 @@ async def chat_with_ai(message):
     except:
         return "Sorry, I'm down right now."
 
-# START
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     button = InlineKeyboardMarkup(
         [[InlineKeyboardButton("➕ Add me to your group", url="https://t.me/YOUR_CINDRELLABOT?startgroup=true")]]
     )
     await update.message.reply_text("Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=button)
 
-# ADMIN PANEL
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if uid not in admins:
@@ -74,7 +70,6 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     await update.message.reply_text("Admin Panel", reply_markup=InlineKeyboardMarkup(buttons))
 
-# CALLBACKS
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     uid = query.from_user.id
@@ -91,10 +86,17 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["action"] = "remove_admin"
         await query.message.reply_text("Send user ID to remove from admin:")
     elif query.data == "list_admins" and uid == OWNER_ID:
-        msg = "\n".join([f"{aid} (@{(await context.bot.get_chat(aid)).username})" for aid in admins if aid != OWNER_ID])
+        msg = ""
+        for aid in admins:
+            if aid == OWNER_ID:
+                continue
+            try:
+                user = await context.bot.get_chat(aid)
+                msg += f"{aid} (@{user.username or 'N/A'})\n"
+            except:
+                msg += f"{aid} (username not found)\n"
         await query.message.reply_text("Admins:\n" + (msg or "No admins added"))
 
-# MESSAGE HANDLER
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     chat = update.effective_chat
@@ -125,19 +127,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = await chat_with_ai(msg.text)
         await msg.reply_text(reply)
 
-    # Forward system
     fwd_text = f"👤 From: {uid} (@{msg.from_user.username or 'N/A'})\n"
     if msg.chat.type != "private":
         fwd_text += f"👥 Group: {chat.title}\n🔗 Message: https://t.me/c/{str(chat.id)[4:]}/{msg.message_id}"
     await context.bot.send_message(OWNER_ID, fwd_text)
     await context.bot.copy_message(OWNER_ID, chat.id, msg.message_id)
 
-# GROUP JOIN
 async def group_join(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for member in update.message.new_chat_members:
         await update.message.reply_text(f"Welcome {member.full_name} 🌟")
 
-# COMMANDS
 async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in admins:
         return
@@ -183,28 +182,25 @@ async def demote(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text("User demoted.")
 
-# ROUTES
-@app.route('/webhook', methods=['POST'])
+@flask_app.route('/webhook', methods=['POST'])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), app.bot)
-    app.update_queue.put_nowait(update)
+    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
+    telegram_app.update_queue.put_nowait(update)
     return 'ok'
 
-# HANDLERS
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("admin", admin_panel))
-app.add_handler(CommandHandler("ban", ban))
-app.add_handler(CommandHandler("mute", mute))
-app.add_handler(CommandHandler("promote", promote))
-app.add_handler(CommandHandler("demote", demote))
-app.add_handler(CallbackQueryHandler(handle_callback))
-app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS | filters.MY_CHAT_MEMBER, group_join))
-app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(CommandHandler("admin", admin_panel))
+telegram_app.add_handler(CommandHandler("ban", ban))
+telegram_app.add_handler(CommandHandler("mute", mute))
+telegram_app.add_handler(CommandHandler("promote", promote))
+telegram_app.add_handler(CommandHandler("demote", demote))
+telegram_app.add_handler(CallbackQueryHandler(handle_callback))
+telegram_app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS | filters.MY_CHAT_MEMBER, group_join))
+telegram_app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-# RUN
 if __name__ == "__main__":
-    app.run_webhook(
+    telegram_app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
         webhook_url=WEBHOOK_URL + "/webhook"
-    )
+)
