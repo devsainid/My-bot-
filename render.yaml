@@ -7,7 +7,7 @@ services:
     startCommand: python bot.py
     envVars:
       - key: BOT_TOKEN
-        value: 7604364226:AAFvwTLgWeDEQp-Bto7o25JLxylc-P-ITYU
+        value: 7604364226:AAFzrc-Vp1C9bysTTnec2YhozEO-cei_iAg
       - key: OWNER_ID
         value: "6559745280"
       - key: OPENROUTER_API_KEY
