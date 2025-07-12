@@ -73,11 +73,12 @@ async def is_admin(update: Update):
 
 # Commands
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message:
+    msg = update.effective_message
+    if msg:
         btn = InlineKeyboardMarkup.from_button(
             InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")
         )
-        await update.message.reply_text("Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=btn)
+        await msg.reply_text("Hey, I'm CINDRELLA 🌹🕯️. How you found me dear 🌹🕯️..?", reply_markup=btn)
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
