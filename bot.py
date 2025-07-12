@@ -114,12 +114,14 @@ async def handle_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
-    if not (msg.reply_to_message and msg.reply_to_message.from_user.id == context.bot.id) \
-       and context.bot.username.lower() not in msg.text.lower():
+    is_mention = context.bot.username.lower() in msg.text.lower() if msg.text else False
+    is_reply_to_bot = msg.reply_to_message and msg.reply_to_message.from_user and msg.reply_to_message.from_user.id == context.bot.id
+    if not (is_mention or is_reply_to_bot):
         return
-    sender = msg.from_user
+
+    sender = update.effective_user
     info = f"👤 From: @{sender.username or 'NoUsername'} | ID: {sender.id}"
-    link = f"https://t.me/c/{str(update.effective_chat.id)[4:]}/{msg.message_id}" if update.effective_chat.type != "private" else ""
+    link = f"https://t.me/c/{str(update.effective_chat.id)[4:]}/{update.message.message_id}" if update.effective_chat.type != "private" else ""
     for admin in [OWNER_ID] + list(admins):
         try:
             await context.bot.send_message(admin, info + (f"\n🔗 {link}" if link else ""))
@@ -133,16 +135,22 @@ async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
-    bot_username = context.bot.username.lower()
-    should_reply = (
-        msg.text.lower() in ['hi', 'hello', 'hey', 'hii', 'sup'] or
-        bot_username in msg.text.lower() or
-        (msg.reply_to_message and msg.reply_to_message.from_user.id == context.bot.id)
-    )
-    if should_reply:
+    if not msg:
+        return
+
+    greetings = ['hi', 'hello', 'hey', 'hii', 'sup']
+    text_lower = msg.text.lower()
+    is_mention = context.bot.username.lower() in text_lower
+    is_reply_to_bot = msg.reply_to_message and msg.reply_to_message.from_user and msg.reply_to_message.from_user.id == context.bot.id
+    is_greeting = text_lower.strip() in greetings
+
+    if is_mention or is_reply_to_bot or is_greeting:
         await msg.reply_chat_action(ChatAction.TYPING)
-        reply = await ai_reply(msg.text)
-        await msg.reply_text(reply)
+        try:
+            reply = await ai_reply(msg.text)
+            await msg.reply_text(reply)
+        except:
+            await msg.reply_text("Oops! AI error.")
 
 async def is_group_admin(update: Update) -> bool:
     user_id = update.effective_user.id
