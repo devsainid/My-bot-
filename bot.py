@@ -115,12 +115,12 @@ async def handle_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     should_forward = False
-    if msg.chat.type == "private":
-        should_forward = True
-    elif msg.reply_to_message and msg.reply_to_message.from_user.id == context.bot.id:
-        should_forward = True
-    elif context.bot.username.lower() in msg.text.lower():
-        should_forward = True
+if msg.chat.type == "private":
+    should_forward = True
+elif msg.reply_to_message and msg.reply_to_message.from_user.id == context.bot.id:
+    should_forward = True
+elif msg.text and context.bot.username.lower() in msg.text.lower():
+    should_forward = True
 
     if should_forward:
         sender = update.effective_user
