@@ -1,3 +1,6 @@
+# FINAL bot.py
+# Version: 2025-07-12 (All features + stable)
+
 import os
 import logging
 import random
@@ -5,10 +8,12 @@ import httpx
 import telegram
 from flask import Flask, request
 from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions, ChatMemberAdministrator, ChatMemberOwner
+    Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions,
+    ChatMemberAdministrator, ChatMemberOwner
 )
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler, ConversationHandler
+    ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes,
+    filters, CallbackQueryHandler, ConversationHandler
 )
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -22,6 +27,9 @@ logging.basicConfig(level=logging.INFO)
 telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
 
 ADMINS = set([OWNER_ID])
+USAGE_COUNT = 0
+WELCOME_MESSAGE = "Welcome to the group!"
+GREETING_WORDS = ["hi", "hello", "hey", "sup", "yo", "heya"]
 BOT_SYSTEM_PROMPT = {
     "role": "system",
     "content": "You are CINDRELLA, a 16-year-old sweet, kind, emotionally intelligent girl. You reply like a real best friend in short, human-like sentences."
@@ -33,11 +41,9 @@ OPENROUTER_MODELS = [
     "openrouter/nous-hermes-2-mixtral", "mistralai/mistral-7b-instruct"
 ]
 
-USAGE_COUNT = 0
-GREETING_WORDS = ["hi", "hello", "hey", "sup", "yo", "heya"]
 ADMIN_PANEL, ADDING_ADMIN, REMOVING_ADMIN = range(3)
-WELCOME_MESSAGE = "Welcome to the group!"
 
+# AI reply
 async def ai_reply(prompt):
     global USAGE_COUNT
     USAGE_COUNT += 1
@@ -59,19 +65,25 @@ async def ai_reply(prompt):
     except:
         return "Oops! AI error."
 
+# Admin check
+async def is_admin(update: Update):
+    user_id = update.effective_user.id
+    member = await update.effective_chat.get_member(user_id)
+    return user_id in ADMINS or isinstance(member, (ChatMemberAdministrator, ChatMemberOwner))
+
+# Commands
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    btn = InlineKeyboardMarkup.from_button(
-        InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")
-    )
-    await update.message.reply_text("Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=btn)
+    if update.message:
+        btn = InlineKeyboardMarkup.from_button(
+            InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")
+        )
+        await update.message.reply_text("Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=btn)
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in ADMINS:
         return await update.message.reply_text("You aren't allowed here.")
-    buttons = [
-        [InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")],
-    ]
+    buttons = [[InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")]]
     if user_id == OWNER_ID:
         buttons += [
             [InlineKeyboardButton("➕ Add Admin", callback_data="add_admin")],
@@ -108,20 +120,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = msg.text.lower()
     if msg.from_user.id == OWNER_ID and context.user_data.get('action') == 'broadcast':
         for admin_id in ADMINS:
-            try:
-                await context.bot.send_message(admin_id, msg.text)
-            except:
-                pass
+            try: await context.bot.send_message(admin_id, msg.text)
+            except: pass
         await msg.reply_text("✅ Broadcast sent.")
         context.user_data.clear()
         return
-    if any(greet in text for greet in GREETING_WORDS):
+    if any(word in text for word in GREETING_WORDS):
         return await msg.reply_text(random.choice(["Heyy", "Hii love", "Yo!", "Sweet hello", "Cutee hii 💖"]))
     if text.startswith("give me") and "pic" in text:
         keyword = text.replace("give me", "").replace("pic", "").strip()
         url = f"https://loremflickr.com/640/360/{keyword}"
         return await msg.reply_photo(photo=url)
-    reply = await ai_reply(msg.text)
+    reply = await ai_reply(text)
     await msg.reply_text(reply[:300])
 
 async def add_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -146,12 +156,6 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Cancelled.")
     return ConversationHandler.END
 
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
-    telegram_app.update_queue.put_nowait(update)
-    return 'ok'
-
 async def sticker_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("That's cute! 💫")
 
@@ -165,12 +169,7 @@ async def set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     WELCOME_MESSAGE = update.message.text.split(' ', 1)[1]
     await update.message.reply_text("✅ Welcome message updated.")
 
-async def is_admin(update: Update):
-    user_id = update.effective_user.id
-    chat_id = update.effective_chat.id
-    member = await update.effective_chat.get_member(user_id)
-    return user_id in ADMINS or isinstance(member, (ChatMemberAdministrator, ChatMemberOwner))
-
+# Group admin commands
 async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update): return
     try:
@@ -234,6 +233,14 @@ async def unpin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ Unpinned")
     except: await update.message.reply_text("❌ Failed")
 
+# Flask webhook
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
+    telegram_app.update_queue.put_nowait(update)
+    return 'ok'
+
+# Conversation handler for admin panel
 panel_conv = ConversationHandler(
     entry_points=[CommandHandler("admin", admin_panel)],
     states={
@@ -244,6 +251,7 @@ panel_conv = ConversationHandler(
     fallbacks=[CommandHandler("cancel", cancel)]
 )
 
+# Add handlers
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("ban", ban))
 telegram_app.add_handler(CommandHandler("unban", unban))
@@ -259,9 +267,10 @@ telegram_app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, w
 telegram_app.add_handler(MessageHandler(filters.Sticker.ALL, sticker_reply))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
+# Start bot
 if __name__ == '__main__':
     telegram_app.run_webhook(
         listen='0.0.0.0',
         port=PORT,
         webhook_url=f"{WEBHOOK_URL}/webhook"
-               )
+)
