@@ -113,6 +113,7 @@ async def handle_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_message(...)  
     msg = update.message
     should_forward = False
 if msg.chat.type == "private":
