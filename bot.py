@@ -3,7 +3,7 @@ import logging
 import httpx
 from flask import Flask, request
 from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions, MessageEntity
+    Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions, Message
 )
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler,
@@ -113,13 +113,21 @@ async def handle_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg: Message = update.message
+    if not msg.text and not msg.caption and not msg.sticker and not msg.photo:
+        return
+    if not msg.entities and not msg.reply_to_message:
+        return
+    mentioned = any(e.type == 'mention' and context.bot.username.lower() in msg.text.lower() for e in msg.entities or [])
+    if not mentioned and not msg.reply_to_message:
+        return
     sender = update.effective_user
     info = f"👤 From: @{sender.username or 'NoUsername'} | ID: {sender.id}"
-    link = f"https://t.me/c/{str(update.effective_chat.id)[4:]}/{update.message.message_id}" if update.effective_chat.type != "private" else ""
+    link = f"https://t.me/c/{str(update.effective_chat.id)[4:]}/{msg.message_id}" if update.effective_chat.type != "private" else ""
     for admin in [OWNER_ID] + list(admins):
         try:
             await context.bot.send_message(admin, info + (f"\n🔗 {link}" if link else ""))
-            await update.message.copy_to(admin)
+            await msg.copy_to(admin)
         except:
             continue
     if update.effective_chat.type == "private":
@@ -129,14 +137,10 @@ async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
-    if (msg.text.lower() in ['hi', 'hello', 'hey', 'hii', 'sup']) or (context.bot.username.lower() in msg.text.lower()):
+    if (msg.text and msg.text.lower() in ['hi', 'hello', 'hey', 'hii', 'sup']) or (context.bot.username.lower() in msg.text.lower()) or msg.reply_to_message and msg.reply_to_message.from_user.id == context.bot.id:
         await msg.reply_chat_action(ChatAction.TYPING)
         reply = await ai_reply(msg.text)
         await msg.reply_text(reply)
-
-async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.sticker or update.message.photo:
-        await update.message.reply_text("Hehe that's cute 💕")
 
 async def is_group_admin(update: Update) -> bool:
     user_id = update.effective_user.id
@@ -193,7 +197,6 @@ application.add_handler(CommandHandler("admin", admin_panel))
 application.add_handler(CallbackQueryHandler(panel_callback))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 application.add_handler(MessageHandler(filters.ALL, forward_all))
-application.add_handler(MessageHandler(filters.Sticker.ALL | filters.PHOTO, handle_media))
 application.add_handler(CommandHandler("ban", ban))
 application.add_handler(CommandHandler("mute", mute))
 application.add_handler(CommandHandler("unmute", unmute))
