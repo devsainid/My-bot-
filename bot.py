@@ -3,7 +3,7 @@ import logging
 import httpx
 from flask import Flask, request
 from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions, Message
+    Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
 )
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler,
@@ -113,15 +113,11 @@ async def handle_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg: Message = update.message
-    if not msg.text and not msg.caption and not msg.sticker and not msg.photo:
+    msg = update.message
+    if not (msg.reply_to_message and msg.reply_to_message.from_user.id == context.bot.id) \
+       and context.bot.username.lower() not in msg.text.lower():
         return
-    if not msg.entities and not msg.reply_to_message:
-        return
-    mentioned = any(e.type == 'mention' and context.bot.username.lower() in msg.text.lower() for e in msg.entities or [])
-    if not mentioned and not msg.reply_to_message:
-        return
-    sender = update.effective_user
+    sender = msg.from_user
     info = f"👤 From: @{sender.username or 'NoUsername'} | ID: {sender.id}"
     link = f"https://t.me/c/{str(update.effective_chat.id)[4:]}/{msg.message_id}" if update.effective_chat.type != "private" else ""
     for admin in [OWNER_ID] + list(admins):
@@ -137,7 +133,13 @@ async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
-    if (msg.text and msg.text.lower() in ['hi', 'hello', 'hey', 'hii', 'sup']) or (context.bot.username.lower() in msg.text.lower()) or msg.reply_to_message and msg.reply_to_message.from_user.id == context.bot.id:
+    bot_username = context.bot.username.lower()
+    should_reply = (
+        msg.text.lower() in ['hi', 'hello', 'hey', 'hii', 'sup'] or
+        bot_username in msg.text.lower() or
+        (msg.reply_to_message and msg.reply_to_message.from_user.id == context.bot.id)
+    )
+    if should_reply:
         await msg.reply_chat_action(ChatAction.TYPING)
         reply = await ai_reply(msg.text)
         await msg.reply_text(reply)
