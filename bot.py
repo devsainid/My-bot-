@@ -71,15 +71,14 @@ async def is_admin(update: Update):
     member = await update.effective_chat.get_member(user_id)
     return user_id in ADMINS or isinstance(member, (ChatMemberAdministrator, ChatMemberOwner))
 
-# Commands
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Commandsasync def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+   async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
     if msg:
         btn = InlineKeyboardMarkup.from_button(
             InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")
         )
-        await msg.reply_text("Hey, I'm CINDRELLA 🌹🕯️. How you found me dear 🌹🕯️..?", reply_markup=btn)
-
+        await msg.reply_text("Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=btn)
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in ADMINS:
