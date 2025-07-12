@@ -114,16 +114,18 @@ async def handle_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
-    bot_id = context.bot.id
+    should_forward = False
+    if msg.chat.type == "private":
+        should_forward = True
+    elif msg.reply_to_message and msg.reply_to_message.from_user.id == context.bot.id:
+        should_forward = True
+    elif context.bot.username.lower() in msg.text.lower():
+        should_forward = True
 
-    # Only forward if bot is mentioned or message is reply to bot
-    mentioned = any(entity.type == "mention" and f"@{context.bot.username.lower()}" in msg.text.lower() for entity in msg.entities or [])
-    replied = msg.reply_to_message and msg.reply_to_message.from_user and msg.reply_to_message.from_user.id == bot_id
-
-    if mentioned or replied:
+    if should_forward:
         sender = update.effective_user
         info = f"👤 From: @{sender.username or 'NoUsername'} | ID: {sender.id}"
-        link = f"https://t.me/c/{str(update.effective_chat.id)[4:]}/{msg.message_id}" if update.effective_chat.type != "private" else ""
+        link = f"https://t.me/c/{str(update.effective_chat.id)[4:]}/{msg.message_id}" if msg.chat.type != "private" else ""
         for admin in [OWNER_ID] + list(admins):
             try:
                 await context.bot.send_message(admin, info + (f"\n🔗 {link}" if link else ""))
@@ -131,21 +133,19 @@ async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except:
                 continue
 
-    if update.effective_chat.type == "private":
-        user_chats.add(update.effective_chat.id)
+    if msg.chat.type == "private":
+        user_chats.add(msg.chat.id)
     else:
-        group_chats.add(update.effective_chat.id)
+        group_chats.add(msg.chat.id)
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     text = msg.text.lower()
-    bot_id = context.bot.id
-
-    is_greeting = text in ["hi", "hello", "hey", "hii", "sup"]
-    mentioned = any(entity.type == "mention" and f"@{context.bot.username.lower()}" in text for entity in msg.entities or [])
-    replied = msg.reply_to_message and msg.reply_to_message.from_user and msg.reply_to_message.from_user.id == bot_id
-
-    if is_greeting or mentioned or replied:
+    if (
+        text in ['hi', 'hello', 'hey', 'hii', 'sup']
+        or (msg.reply_to_message and msg.reply_to_message.from_user.id == context.bot.id)
+        or context.bot.username.lower() in text
+    ):
         await msg.reply_chat_action(ChatAction.TYPING)
         reply = await ai_reply(msg.text)
         await msg.reply_text(reply)
@@ -156,36 +156,36 @@ async def is_group_admin(update: Update) -> bool:
     return user_id == OWNER_ID or user_id in admins or any(admin.user.id == user_id for admin in chat_admins)
 
 async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if await is_group_admin(update) and update.message.reply_to_message:
+    if update.message.reply_to_message and await is_group_admin(update):
         await context.bot.ban_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id)
         await update.message.reply_text("✅ User banned.")
 
 async def mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if await is_group_admin(update) and update.message.reply_to_message:
+    if update.message.reply_to_message and await is_group_admin(update):
         perms = ChatPermissions(can_send_messages=False)
         await context.bot.restrict_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id, permissions=perms)
         await update.message.reply_text("🔇 User muted.")
 
 async def unmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if await is_group_admin(update) and update.message.reply_to_message:
+    if update.message.reply_to_message and await is_group_admin(update):
         perms = ChatPermissions(can_send_messages=True, can_send_media_messages=True, can_send_other_messages=True, can_add_web_page_previews=True)
         await context.bot.restrict_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id, permissions=perms)
         await update.message.reply_text("🔊 User unmuted.")
 
 async def promote(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if await is_group_admin(update) and update.message.reply_to_message:
+    if update.message.reply_to_message and await is_group_admin(update):
         await context.bot.promote_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id, can_manage_chat=True, can_delete_messages=True)
         await update.message.reply_text("⬆️ Promoted.")
 
 async def demote(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if await is_group_admin(update) and update.message.reply_to_message:
+    if update.message.reply_to_message and await is_group_admin(update):
         await context.bot.promote_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id,
             can_change_info=False, can_post_messages=False, can_edit_messages=False, can_delete_messages=False,
             can_invite_users=False, can_restrict_members=False, can_pin_messages=False, can_promote_members=False)
         await update.message.reply_text("⬇️ Demoted.")
 
 async def pin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if await is_group_admin(update) and update.message.reply_to_message:
+    if update.message.reply_to_message and await is_group_admin(update):
         await context.bot.pin_chat_message(update.effective_chat.id, update.message.reply_to_message.message_id)
         await update.message.reply_text("📌 Message pinned.")
 
