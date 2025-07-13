@@ -6,7 +6,7 @@ from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ContextTypes, filters
+    CallbackQueryHandler, ContextTypes, filters, ChatMemberHandler
 )
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -38,21 +38,20 @@ async def ai_reply(text):
         "model": "openchat/openchat-3.5",
         "messages": [system_prompt, {"role": "user", "content": text}]
     }
-    res = httpx.post(url, headers=headers, json=data)
     try:
+        res = httpx.post(url, headers=headers, json=data, timeout=15)
         return res.json()["choices"][0]["message"]["content"].strip()
     except:
         return "I'm having a little trouble replying right now. Try again later."
 
-# ✅ /start fully fixed
+# ✅ START Command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]
     ])
-    chat = update.effective_chat
-    if chat:
-        await context.bot.send_message(chat_id=chat.id, text="Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=kb)
+    await update.effective_chat.send_message("Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=kb)
 
+# ✅ ADMIN Panel
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in admins:
@@ -66,6 +65,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     await update.message.reply_text("Choose an option:", reply_markup=InlineKeyboardMarkup(buttons))
 
+# ✅ Admin Buttons
 async def admin_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -81,6 +81,7 @@ async def admin_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "listadmins":
         await query.message.reply_text("Admins: " + ', '.join(map(str, admins)))
 
+# ✅ Text Handler (AI, Greet, Admin Actions)
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.lower()
     user_id = update.effective_user.id
@@ -119,9 +120,11 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = await ai_reply(update.message.text)
         await update.message.reply_text(reply)
 
+# ✅ Sticker Response
 async def sticker_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("That's a cute sticker 💖")
 
+# ✅ Forward All Messages to Admins
 async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     text = msg.text or msg.caption or ""
@@ -129,51 +132,55 @@ async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
         link = f"https://t.me/c/{str(msg.chat.id)[4:]}/{msg.message_id}" if str(msg.chat.id).startswith("-100") else None
         info = f"From Group: {msg.chat.title}\nUser: {msg.from_user.first_name} (@{msg.from_user.username})\nMsg: {text}"
     else:
-        link = None
         info = f"From Private: {msg.from_user.first_name} (@{msg.from_user.username})\nMsg: {text}"
+        link = None
     for admin in admins:
         try:
             await context.bot.send_message(admin, info + (f"\n🔗 {link}" if link else ""))
         except:
             pass
 
+# ✅ Group Admin + Bot Admin Check
+async def is_admin(update):
+    chat = update.effective_chat
+    user = update.effective_user
+    try:
+        member = await chat.get_member(user.id)
+        return member.status in ["administrator", "creator"] or user.id in admins
+    except:
+        return False
+
+# ✅ Commands (Kick, Ban, etc.)
 async def kick(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in admins:
+    if not await is_admin(update):
         return
-    if not update.message.reply_to_message:
-        return await update.message.reply_text("Reply to the user to kick.")
-    user_id = update.message.reply_to_message.from_user.id
-    await context.bot.ban_chat_member(update.effective_chat.id, user_id)
-    await update.message.reply_text("User kicked.")
+    if update.message.reply_to_message:
+        await context.bot.ban_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id)
+        await update.message.reply_text("User kicked.")
 
 async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in admins:
+    if not await is_admin(update):
         return
-    if not update.message.reply_to_message:
-        return await update.message.reply_text("Reply to the user to ban.")
-    user_id = update.message.reply_to_message.from_user.id
-    await context.bot.ban_chat_member(update.effective_chat.id, user_id)
-    await update.message.reply_text("User banned.")
+    if update.message.reply_to_message:
+        await context.bot.ban_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id)
+        await update.message.reply_text("User banned.")
 
 async def unban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in admins:
+    if not await is_admin(update):
         return
-    if not update.message.reply_to_message:
-        return await update.message.reply_text("Reply to the user to unban.")
-    user_id = update.message.reply_to_message.from_user.id
-    await context.bot.unban_chat_member(update.effective_chat.id, user_id)
-    await update.message.reply_text("User unbanned.")
+    if update.message.reply_to_message:
+        await context.bot.unban_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id)
+        await update.message.reply_text("User unbanned.")
 
 async def pin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in admins:
+    if not await is_admin(update):
         return
-    if not update.message.reply_to_message:
-        return await update.message.reply_text("Reply to pin.")
-    await context.bot.pin_chat_message(update.effective_chat.id, update.message.reply_to_message.message_id)
-    await update.message.reply_text("Message pinned.")
+    if update.message.reply_to_message:
+        await context.bot.pin_chat_message(update.effective_chat.id, update.message.reply_to_message.message_id)
+        await update.message.reply_text("Message pinned.")
 
 async def unpin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in admins:
+    if not await is_admin(update):
         return
     await context.bot.unpin_all_chat_messages(update.effective_chat.id)
     await update.message.reply_text("All messages unpinned.")
@@ -181,34 +188,39 @@ async def unpin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def promote(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
         return
-    if not update.message.reply_to_message:
-        return await update.message.reply_text("Reply to the user to promote.")
-    user_id = update.message.reply_to_message.from_user.id
-    await context.bot.promote_chat_member(
-        update.effective_chat.id,
-        user_id,
-        can_change_info=True,
-        can_delete_messages=True,
-        can_invite_users=True,
-        can_restrict_members=True,
-        can_pin_messages=True,
-        can_promote_members=False
-    )
-    await update.message.reply_text("User promoted.")
+    if update.message.reply_to_message:
+        user_id = update.message.reply_to_message.from_user.id
+        await context.bot.promote_chat_member(
+            update.effective_chat.id, user_id,
+            can_change_info=True, can_delete_messages=True, can_invite_users=True,
+            can_restrict_members=True, can_pin_messages=True, can_promote_members=False
+        )
+        await update.message.reply_text("User promoted.")
 
+# ✅ Welcome Message
+async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.chat_member.new_chat_member.status in ["member", "administrator"]:
+        new_user = update.chat_member.new_chat_member.user
+        await context.bot.send_message(
+            chat_id=update.chat_member.chat.id,
+            text=f"🌸 Welcome {new_user.first_name} to {update.chat_member.chat.title}! 🌸"
+        )
+
+# ✅ Webhook Endpoint
 @app.route('/webhook', methods=['POST'])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
     application.update_queue.put_nowait(update)
     return 'ok'
 
+# ✅ MAIN ENTRY
 if __name__ == '__main__':
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # ✅ Order matters — /start must be registered before filters.ALL
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('admin', admin_panel))
     application.add_handler(CallbackQueryHandler(admin_buttons))
+
     application.add_handler(CommandHandler('kick', kick))
     application.add_handler(CommandHandler('ban', ban))
     application.add_handler(CommandHandler('unban', unban))
@@ -216,12 +228,13 @@ if __name__ == '__main__':
     application.add_handler(CommandHandler('unpin', unpin))
     application.add_handler(CommandHandler('promote', promote))
 
+    application.add_handler(ChatMemberHandler(welcome, ChatMemberHandler.CHAT_MEMBER))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     application.add_handler(MessageHandler(filters.Sticker.ALL, sticker_handler))
-    application.add_handler(MessageHandler(filters.ALL, forward_all))  # LAST
+    application.add_handler(MessageHandler(filters.ALL, forward_all))  # last for safety
 
     application.run_webhook(
         listen="0.0.0.0",
-        port=int(os.environ.get('PORT', 10000)),
+        port=int(os.environ.get("PORT", 10000)),
         webhook_url=WEBHOOK_URL + "/webhook"
 )
