@@ -49,12 +49,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]
     ])
-    if update.message:
-        await update.message.reply_text("Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=kb)
-    elif update.callback_query:
-        await update.callback_query.message.reply_text("Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=kb)
-    elif update.effective_chat:
-        await context.bot.send_message(update.effective_chat.id, "Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=kb)
+    chat = update.effective_chat
+    if chat:
+        await context.bot.send_message(chat_id=chat.id, text="Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=kb)
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -225,4 +222,4 @@ if __name__ == '__main__':
         listen="0.0.0.0",
         port=int(os.environ.get('PORT', 10000)),
         webhook_url=WEBHOOK_URL + "/webhook"
-    )
+        )
