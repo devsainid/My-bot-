@@ -44,7 +44,7 @@ async def ai_reply(text):
     except:
         return "I'm having a little trouble replying right now. Try again later."
 
-# ✅ FIXED /start handler
+# ✅ /start fully fixed
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]
@@ -205,7 +205,7 @@ def webhook():
 if __name__ == '__main__':
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # ✅ Place specific handlers BEFORE generic ones
+    # ✅ Order matters — /start must be registered before filters.ALL
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('admin', admin_panel))
     application.add_handler(CallbackQueryHandler(admin_buttons))
@@ -218,10 +218,10 @@ if __name__ == '__main__':
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     application.add_handler(MessageHandler(filters.Sticker.ALL, sticker_handler))
-    application.add_handler(MessageHandler(filters.ALL, forward_all))  # ⚠️ Keep this LAST
+    application.add_handler(MessageHandler(filters.ALL, forward_all))  # LAST
 
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get('PORT', 10000)),
         webhook_url=WEBHOOK_URL + "/webhook"
-    )
+)
