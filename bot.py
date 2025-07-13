@@ -205,6 +205,7 @@ def webhook():
 if __name__ == '__main__':
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # ✅ Place specific handlers BEFORE generic ones
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('admin', admin_panel))
     application.add_handler(CallbackQueryHandler(admin_buttons))
@@ -214,12 +215,13 @@ if __name__ == '__main__':
     application.add_handler(CommandHandler('pin', pin))
     application.add_handler(CommandHandler('unpin', unpin))
     application.add_handler(CommandHandler('promote', promote))
-    application.add_handler(MessageHandler(filters.ALL, forward_all))
+
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     application.add_handler(MessageHandler(filters.Sticker.ALL, sticker_handler))
+    application.add_handler(MessageHandler(filters.ALL, forward_all))  # ⚠️ Keep this LAST
 
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get('PORT', 10000)),
         webhook_url=WEBHOOK_URL + "/webhook"
-        )
+    )
