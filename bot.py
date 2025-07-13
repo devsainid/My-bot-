@@ -3,235 +3,174 @@ import logging
 import json
 import httpx
 from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
+from telegram import (Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, ChatPermissions)
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ContextTypes, filters, ChatMemberHandler
+    ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler,
+    ContextTypes, filters
 )
 
-# ✅ ENV setup
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-OWNER_ID = int(os.environ.get("OWNER_ID", "6559745280"))
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+OWNER_ID = int(os.getenv("OWNER_ID"))
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-admins = set([OWNER_ID])
-
-# ✅ Logging
+app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
-# ✅ AI SYSTEM PROMPT
+admins = set()
+users = set()
+
 system_prompt = {
     "role": "system",
     "content": "You are CINDRELLA, a 16-year-old girl. You are sweet, kind, emotionally intelligent and speak only English. You talk like a real person and connect emotionally like a best friend."
 }
 
-# ✅ Greetings Trigger
-greetings = ["hi", "hello", "hey", "sup", "heya", "yo"]
+# --- Helper Functions ---
 
-# ✅ AI Response
-async def ai_reply(text):
-    try:
-        res = await httpx.AsyncClient().post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "openchat/openchat-3.5",
-                "messages": [system_prompt, {"role": "user", "content": text}]
-            },
-            timeout=15
-        )
-        return res.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        print("AI reply error:", e)
-        return "I'm having a little trouble replying right now. Try again later."
+def is_owner(user_id):
+    return user_id == OWNER_ID
 
-# ✅ /start handler
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]
-    ])
-    try:
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?",
-            reply_markup=kb
-        )
-    except Exception as e:
-        print("❌ /start error:", e)
+def is_admin(user_id):
+    return user_id in admins or is_owner(user_id)
 
-# ✅ /admin panel
-async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id not in admins:
-        return await update.message.reply_text("You are not allowed here.")
-    buttons = [[InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")]]
-    if user_id == OWNER_ID:
-        buttons += [
-            [InlineKeyboardButton("➕ Add Admin", callback_data="addadmin")],
-            [InlineKeyboardButton("➖ Remove Admin", callback_data="removeadmin")],
-            [InlineKeyboardButton("📋 List Admins", callback_data="listadmins")]
+def get_image_from_unsplash(query):
+    url = f"https://source.unsplash.com/800x600/?{query}"
+    return url
+
+def build_admin_keyboard():
+    keyboard = []
+    if is_owner(OWNER_ID):
+        keyboard += [
+            [InlineKeyboardButton("➕ Add Admin", callback_data="add_admin")],
+            [InlineKeyboardButton("➖ Remove Admin", callback_data="remove_admin")],
+            [InlineKeyboardButton("📋 List Admins", callback_data="list_admins")]
         ]
-    await update.message.reply_text("Choose an option:", reply_markup=InlineKeyboardMarkup(buttons))
+    keyboard.insert(0, [InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")])
+    return InlineKeyboardMarkup(keyboard)
 
-# ✅ Admin button callbacks
-async def admin_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# --- Commands ---
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    users.add(update.effective_user.id)
+    keyboard = [[InlineKeyboardButton("➕ Add me to your group", url="https://t.me/{}?startgroup=true".format(context.bot.username))]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=reply_markup)
+
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if is_admin(update.effective_user.id):
+        await update.message.reply_text("Admin Panel:", reply_markup=build_admin_keyboard())
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
     if query.data == "broadcast":
-        context.user_data['action'] = 'broadcast'
-        await query.message.reply_text("Send the message to broadcast.")
-    elif query.data == "addadmin":
-        context.user_data['action'] = 'addadmin'
+        context.user_data["awaiting_broadcast"] = True
+        await query.message.reply_text("Send me the message to broadcast.")
+
+    elif query.data == "add_admin" and is_owner(query.from_user.id):
+        context.user_data["awaiting_add_admin"] = True
         await query.message.reply_text("Send user ID to add as admin.")
-    elif query.data == "removeadmin":
-        context.user_data['action'] = 'removeadmin'
+
+    elif query.data == "remove_admin" and is_owner(query.from_user.id):
+        context.user_data["awaiting_remove_admin"] = True
         await query.message.reply_text("Send user ID to remove from admins.")
-    elif query.data == "listadmins":
-        await query.message.reply_text("Admins: " + ', '.join(map(str, admins)))
 
-# ✅ General text handler
-async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.lower()
+    elif query.data == "list_admins" and is_owner(query.from_user.id):
+        admin_list = "\n".join([str(i) for i in admins]) or "No admins yet."
+        await query.message.reply_text(f"Admins:\n{admin_list}")
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    text = update.message.text or ""
 
-    if user_id in admins and 'action' in context.user_data:
-        action = context.user_data.pop('action')
-        if action == 'broadcast':
-            for chat_id in context.bot_data.get('all_chats', set()):
-                try:
-                    await context.bot.send_message(chat_id, update.message.text)
-                except:
-                    continue
-            return await update.message.reply_text("Broadcast sent.")
-        elif action == 'addadmin':
+    # Broadcast handling
+    if context.user_data.get("awaiting_broadcast"):
+        context.user_data["awaiting_broadcast"] = False
+        for uid in users.union(admins):
             try:
-                admins.add(int(text))
-                return await update.message.reply_text("Admin added.")
+                await context.bot.send_message(uid, text)
             except:
-                return await update.message.reply_text("Invalid ID.")
-        elif action == 'removeadmin':
-            try:
-                admins.discard(int(text))
-                return await update.message.reply_text("Admin removed.")
-            except:
-                return await update.message.reply_text("Invalid ID.")
-
-    if 'all_chats' not in context.bot_data:
-        context.bot_data['all_chats'] = set()
-    context.bot_data['all_chats'].add(update.effective_chat.id)
-
-    if any(x in text for x in ["pic", "photo", "image"]):
-        await update.message.reply_photo("https://picsum.photos/300/400")
+                continue
+        await update.message.reply_text("Broadcast sent ✅")
         return
 
-    if any(greet in text for greet in greetings) or context.bot.username.lower() in text:
-        reply = await ai_reply(update.message.text)
-        await update.message.reply_text(reply)
-
-# ✅ Sticker response
-async def sticker_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("That's a cute sticker 💖")
-
-# ✅ Forward all messages
-async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.message
-    text = msg.text or msg.caption or ""
-    if msg.chat.type in ["group", "supergroup"]:
-        link = f"https://t.me/c/{str(msg.chat.id)[4:]}/{msg.message_id}" if str(msg.chat.id).startswith("-100") else None
-        info = f"From Group: {msg.chat.title}\nUser: {msg.from_user.first_name} (@{msg.from_user.username})\nMsg: {text}"
-    else:
-        link = None
-        info = f"From Private: {msg.from_user.first_name} (@{msg.from_user.username})\nMsg: {text}"
-    for admin in admins:
+    # Add admin
+    if context.user_data.get("awaiting_add_admin"):
+        context.user_data["awaiting_add_admin"] = False
         try:
-            await context.bot.send_message(admin, info + (f"\n🔗 {link}" if link else ""))
+            admins.add(int(text))
+            await update.message.reply_text("Admin added ✅")
         except:
-            pass
+            await update.message.reply_text("Failed to add admin ❌")
+        return
 
-# ✅ Admin checker
-async def is_admin(update):
+    # Remove admin
+    if context.user_data.get("awaiting_remove_admin"):
+        context.user_data["awaiting_remove_admin"] = False
+        try:
+            admins.remove(int(text))
+            await update.message.reply_text("Admin removed ✅")
+        except:
+            await update.message.reply_text("Failed to remove admin ❌")
+        return
+
+    # Check for image request
+    if any(x in text.lower() for x in ["pic", "photo", "image"]):
+        image_url = get_image_from_unsplash(text)
+        await update.message.reply_photo(image_url)
+        return
+
+    # Normal message -> AI reply
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "openchat/openchat-3.5-0106",
+        "messages": [system_prompt, {"role": "user", "content": text}]
+    }
     try:
-        member = await update.effective_chat.get_member(update.effective_user.id)
-        return member.status in ["administrator", "creator"] or update.effective_user.id in admins
+        async with httpx.AsyncClient() as client:
+            res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+            reply = res.json()["choices"][0]["message"]["content"]
+            await update.message.reply_text(reply[:4096])
     except:
-        return False
+        await update.message.reply_text("Sorry, I couldn't respond right now.")
 
-# ✅ Admin commands
-async def kick(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update): return
-    if update.message.reply_to_message:
-        await context.bot.ban_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id)
-        await update.message.reply_text("User kicked.")
+async def sticker_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Aww, nice sticker! 🧸")
 
-async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update): return
-    if update.message.reply_to_message:
-        await context.bot.ban_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id)
-        await update.message.reply_text("User banned.")
+async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    chat = update.effective_chat
+    try:
+        msg_link = f"https://t.me/c/{str(chat.id)[4:]}/{update.message.message_id}" if chat.type != 'private' else ""
+        for admin_id in [OWNER_ID] + list(admins):
+            await context.bot.send_message(admin_id, f"Message from {user.mention_html()} ({user.id}):\n{update.message.text or 'Non-text message'}\n{msg_link}", parse_mode="HTML")
+    except:
+        pass
 
-async def unban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update): return
-    if update.message.reply_to_message:
-        await context.bot.unban_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id)
-        await update.message.reply_text("User unbanned.")
+# --- Webhook Setup ---
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), context.bot)
+    context.application.update_queue.put_nowait(update)
+    return "ok"
 
-async def pin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update): return
-    if update.message.reply_to_message:
-        await context.bot.pin_chat_message(update.effective_chat.id, update.message.reply_to_message.message_id)
-        await update.message.reply_text("Message pinned.")
-
-async def unpin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update): return
-    await context.bot.unpin_all_chat_messages(update.effective_chat.id)
-    await update.message.reply_text("All messages unpinned.")
-
-async def promote(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != OWNER_ID: return
-    if update.message.reply_to_message:
-        user_id = update.message.reply_to_message.from_user.id
-        await context.bot.promote_chat_member(
-            update.effective_chat.id, user_id,
-            can_change_info=True, can_delete_messages=True, can_invite_users=True,
-            can_restrict_members=True, can_pin_messages=True, can_promote_members=False
-        )
-        await update.message.reply_text("User promoted.")
-
-# ✅ Welcome New User
-async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.chat_member.new_chat_member.status in ["member", "administrator"]:
-        user = update.chat_member.new_chat_member.user
-        await context.bot.send_message(update.chat_member.chat.id, f"🌸 Welcome {user.first_name} to {update.chat_member.chat.title}! 🌸")
-
-# ✅ App + Webhook Start
 if __name__ == '__main__':
+    from telegram.ext import Application
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    application.add_handler(CommandHandler('start', start, filters=filters.ChatType.PRIVATE | filters.ChatType.GROUPS))
-    application.add_handler(CommandHandler('admin', admin_panel))
-    application.add_handler(CallbackQueryHandler(admin_buttons))
-
-    application.add_handler(CommandHandler('kick', kick))
-    application.add_handler(CommandHandler('ban', ban))
-    application.add_handler(CommandHandler('unban', unban))
-    application.add_handler(CommandHandler('pin', pin))
-    application.add_handler(CommandHandler('unpin', unpin))
-    application.add_handler(CommandHandler('promote', promote))
-
-    application.add_handler(ChatMemberHandler(welcome, ChatMemberHandler.CHAT_MEMBER))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("admin", admin_panel))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.ALL & ~filters.StatusUpdate.NEW_CHAT_MEMBERS, forward_all), group=0)
+    application.add_handler(MessageHandler(filters.TEXT, handle_message))
     application.add_handler(MessageHandler(filters.Sticker.ALL, sticker_handler))
-    application.add_handler(MessageHandler(filters.ALL, forward_all))
-
-    print(f"🚀 Starting webhook at: {WEBHOOK_URL}/webhook")
 
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
-        webhook_url=WEBHOOK_URL + "/webhook"
+        webhook_url=f"{WEBHOOK_URL}/webhook"
     )
