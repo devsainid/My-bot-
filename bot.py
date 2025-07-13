@@ -27,7 +27,7 @@ greetings = ["hi", "hello", "hey", "sup", "heya", "yo"]
 
 async def ai_reply(text):
     try:
-        res = httpx.post(
+        res = await httpx.AsyncClient().post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -45,7 +45,7 @@ async def ai_reply(text):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]
+        [InlineKeyboardButton("\u2795 Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]
     ])
     await update.effective_chat.send_message("Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=kb)
 
@@ -56,8 +56,8 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     buttons = [[InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")]]
     if user_id == OWNER_ID:
         buttons += [
-            [InlineKeyboardButton("➕ Add Admin", callback_data="addadmin")],
-            [InlineKeyboardButton("➖ Remove Admin", callback_data="removeadmin")],
+            [InlineKeyboardButton("\u2795 Add Admin", callback_data="addadmin")],
+            [InlineKeyboardButton("\u2796 Remove Admin", callback_data="removeadmin")],
             [InlineKeyboardButton("📋 List Admins", callback_data="listadmins")]
         ]
     await update.message.reply_text("Choose an option:", reply_markup=InlineKeyboardMarkup(buttons))
@@ -185,7 +185,6 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.chat_member.new_chat_member.user
         await context.bot.send_message(update.chat_member.chat.id, f"🌸 Welcome {user.first_name} to {update.chat_member.chat.title}! 🌸")
 
-# ✅ Main Entry
 if __name__ == '__main__':
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -209,4 +208,4 @@ if __name__ == '__main__':
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
         webhook_url=WEBHOOK_URL + "/webhook"
-    )
+                )
