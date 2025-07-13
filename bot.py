@@ -40,14 +40,23 @@ async def ai_reply(text):
             timeout=15
         )
         return res.json()["choices"][0]["message"]["content"].strip()
-    except:
+    except Exception as e:
+        print("AI reply error:", e)
         return "I'm having a little trouble replying right now. Try again later."
 
+# ✅ FIXED /start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("\u2795 Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]
+        [InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]
     ])
-    await update.effective_chat.send_message("Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=kb)
+    try:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?",
+            reply_markup=kb
+        )
+    except Exception as e:
+        print("❌ /start error:", e)
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -56,8 +65,8 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     buttons = [[InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")]]
     if user_id == OWNER_ID:
         buttons += [
-            [InlineKeyboardButton("\u2795 Add Admin", callback_data="addadmin")],
-            [InlineKeyboardButton("\u2796 Remove Admin", callback_data="removeadmin")],
+            [InlineKeyboardButton("➕ Add Admin", callback_data="addadmin")],
+            [InlineKeyboardButton("➖ Remove Admin", callback_data="removeadmin")],
             [InlineKeyboardButton("📋 List Admins", callback_data="listadmins")]
         ]
     await update.message.reply_text("Choose an option:", reply_markup=InlineKeyboardMarkup(buttons))
@@ -185,10 +194,12 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.chat_member.new_chat_member.user
         await context.bot.send_message(update.chat_member.chat.id, f"🌸 Welcome {user.first_name} to {update.chat_member.chat.title}! 🌸")
 
+# ✅ Final App Setup
 if __name__ == '__main__':
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    application.add_handler(CommandHandler('start', start))
+    # ✅ Command Handlers
+    application.add_handler(CommandHandler('start', start, filters=filters.ChatType.PRIVATE | filters.ChatType.GROUPS))
     application.add_handler(CommandHandler('admin', admin_panel))
     application.add_handler(CallbackQueryHandler(admin_buttons))
 
@@ -204,8 +215,10 @@ if __name__ == '__main__':
     application.add_handler(MessageHandler(filters.Sticker.ALL, sticker_handler))
     application.add_handler(MessageHandler(filters.ALL, forward_all))
 
+    print(f"🚀 Starting webhook at: {WEBHOOK_URL}/webhook")
+
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
         webhook_url=WEBHOOK_URL + "/webhook"
-                )
+    )
