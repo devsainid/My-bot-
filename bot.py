@@ -2,11 +2,11 @@ import os
 import logging
 import json
 import httpx
+import random
 from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions, ChatMemberAdministrator
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions, ChatMemberAdministrator, ChatMemberOwner
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ContextTypes, filters
+    ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 )
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -22,6 +22,9 @@ logging.basicConfig(level=logging.INFO)
 
 welcome_messages = {}
 
+def is_bot_admin(chat_member):
+    return isinstance(chat_member, ChatMemberAdministrator) or isinstance(chat_member, ChatMemberOwner)
+
 async def send_to_admins(context: ContextTypes.DEFAULT_TYPE, text: str):
     for admin_id in admins_db:
         try:
@@ -30,13 +33,15 @@ async def send_to_admins(context: ContextTypes.DEFAULT_TYPE, text: str):
             pass
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton("\u2795 Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
+    keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=reply_markup)
 
 async def set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_chat.type != "supergroup": return
-    if not (update.effective_user.id in admins_db or await is_admin(update)): return
+    if update.effective_chat.type != "supergroup":
+        return
+    if not (update.effective_user.id in admins_db or await is_admin(update)):
+        return
     msg = " ".join(context.args)
     if not msg:
         return await update.message.reply_text("Please provide a welcome message")
@@ -52,88 +57,69 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def is_admin(update: Update) -> bool:
     try:
         member = await update.effective_chat.get_member(update.effective_user.id)
-        return member.status in ("administrator", "creator")
+        return is_bot_admin(member)
     except:
         return False
 
-# ==== Admin Commands ====
+async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, action: str):
+    if not (update.effective_user.id in admins_db or await is_admin(update)):
+        return
+    if not context.args:
+        return await update.message.reply_text("Reply with /ban, /kick, etc. or provide user ID.")
+    try:
+        user_id = int(context.args[0])
+    except:
+        return await update.message.reply_text("Invalid user ID")
+    chat_id = update.effective_chat.id
 
-async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not (await is_admin(update) or update.effective_user.id in admins_db): return
-    if not update.message.reply_to_message: return await update.message.reply_text("Reply to a user to ban.")
-    await context.bot.ban_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id)
-    await update.message.reply_text("User banned!")
-
-async def unban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not (await is_admin(update) or update.effective_user.id in admins_db): return
-    if not context.args: return await update.message.reply_text("Give user ID to unban.")
-    await context.bot.unban_chat_member(update.effective_chat.id, int(context.args[0]))
-    await update.message.reply_text("User unbanned!")
-
-async def mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not (await is_admin(update) or update.effective_user.id in admins_db): return
-    if not update.message.reply_to_message: return
-    await context.bot.restrict_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id, ChatPermissions())
-    await update.message.reply_text("User muted!")
-
-async def unmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not (await is_admin(update) or update.effective_user.id in admins_db): return
-    if not update.message.reply_to_message: return
-    await context.bot.restrict_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id, ChatPermissions(can_send_messages=True))
-    await update.message.reply_text("User unmuted!")
-
-async def kick(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not (await is_admin(update) or update.effective_user.id in admins_db): return
-    if not update.message.reply_to_message: return
-    await context.bot.ban_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id)
-    await context.bot.unban_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id)
-    await update.message.reply_text("User kicked!")
-
-async def promote(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not (await is_admin(update) or update.effective_user.id in admins_db): return
-    if not update.message.reply_to_message: return
-    await context.bot.promote_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id, can_manage_chat=True, can_delete_messages=True, can_promote_members=False)
-    await update.message.reply_text("User promoted!")
-
-async def demote(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not (await is_admin(update) or update.effective_user.id in admins_db): return
-    if not update.message.reply_to_message: return
-    await context.bot.promote_chat_member(update.effective_chat.id, update.message.reply_to_message.from_user.id, can_manage_chat=False, can_delete_messages=False, can_promote_members=False)
-    await update.message.reply_text("User demoted!")
-
-async def pin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not (await is_admin(update) or update.effective_user.id in admins_db): return
-    if update.message.reply_to_message:
-        await context.bot.pin_chat_message(update.effective_chat.id, update.message.reply_to_message.message_id)
-        await update.message.reply_text("Message pinned!")
-
-async def unpin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not (await is_admin(update) or update.effective_user.id in admins_db): return
-    await context.bot.unpin_chat_message(update.effective_chat.id)
-    await update.message.reply_text("Message unpinned!")
-
-async def purge(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not (await is_admin(update) or update.effective_user.id in admins_db): return
-    if not update.message.reply_to_message: return
-    start = update.message.reply_to_message.message_id
-    end = update.message.message_id
-    for msg_id in range(start, end):
-        try:
-            await context.bot.delete_message(update.effective_chat.id, msg_id)
-        except:
-            pass
-
-# ==== AI + Image/Sticker Request Handler ====
+    try:
+        if action == "ban":
+            await context.bot.ban_chat_member(chat_id, user_id)
+        elif action == "unban":
+            await context.bot.unban_chat_member(chat_id, user_id)
+        elif action == "kick":
+            await context.bot.ban_chat_member(chat_id, user_id)
+            await context.bot.unban_chat_member(chat_id, user_id)
+        elif action == "mute":
+            await context.bot.restrict_chat_member(chat_id, user_id, ChatPermissions())
+        elif action == "unmute":
+            await context.bot.restrict_chat_member(chat_id, user_id, ChatPermissions(can_send_messages=True, can_send_media_messages=True, can_send_other_messages=True, can_add_web_page_previews=True))
+        elif action == "pin":
+            await context.bot.pin_chat_message(chat_id, update.message.reply_to_message.message_id)
+        elif action == "unpin":
+            await context.bot.unpin_chat_message(chat_id)
+        elif action == "promote":
+            await context.bot.promote_chat_member(chat_id, user_id, can_manage_chat=True, can_change_info=True, can_delete_messages=True, can_invite_users=True, can_restrict_members=True, can_pin_messages=True, can_promote_members=True)
+        elif action == "demote":
+            await context.bot.promote_chat_member(chat_id, user_id, can_manage_chat=False, can_change_info=False, can_delete_messages=False, can_invite_users=False, can_restrict_members=False, can_pin_messages=False, can_promote_members=False)
+        elif action == "purge":
+            if update.message.reply_to_message:
+                for msg_id in range(update.message.reply_to_message.message_id, update.message.message_id):
+                    try:
+                        await context.bot.delete_message(chat_id, msg_id)
+                    except:
+                        pass
+        await update.message.reply_text(f"✅ Action '{action}' done.")
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}")
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.message.text.lower()
-    if msg in ["hi", "hello", "hey", "sup", "yo", "hii"]:
-        await update.message.reply_text("Hey cutie 🥺💖")
-    elif any(word in msg for word in ["pic of", "image of", "show me", "photo of"]):
-        await update.message.reply_photo("https://source.unsplash.com/600x400/?" + msg.replace(" ", "_"))
-    elif any(word in msg for word in ["sticker", "send sticker"]):
-        await update.message.reply_sticker("CAACAgUAAxkBAAEBLZxkFz0AAUeBp-lHYJPTwDwVYHZQj_8AAu8DAAIBVm1V4v_Ev5x2fKc1BA")
-    else:
+    message = update.message
+    msg = message.text.lower()
+    bot_username = context.bot.username.lower()
+
+    greeting_words = ["hi", "hello", "hey", "yo", "sup", "hii", "heyy", "heya"]
+    greeting_replies = [
+        "Hey cutie 🥺💞", "Hi love 💕", "Hello darling 🌸", "Yo! how’s your day going? ☀️",
+        "Hiiiii bestie 💖", "Hey sunshine 🌼", "Hi there 👋", "Sup sweetie 🍬"
+    ]
+
+    mentioned = message.entities and any(e.type == "mention" and bot_username in message.text.lower() for e in message.entities)
+    replied_to_bot = message.reply_to_message and message.reply_to_message.from_user.id == context.bot.id
+
+    if msg in greeting_words and not message.entities and not message.reply_to_message:
+        await message.reply_text(random.choice(greeting_replies))
+    elif mentioned or replied_to_bot:
         await ai_reply(update, context)
 
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -161,9 +147,9 @@ async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     if chat.type == "private":
         for admin_id in admins_db:
-            await context.bot.send_message(admin_id, f"💎 Private msg from @{user.username or user.first_name}\n\n{update.message.text}")
+            await context.bot.send_message(admin_id, f"📩 Private msg from @{user.username or user.first_name}\n\n{update.message.text}")
     elif chat.type in ["group", "supergroup"]:
-        link = f"https://t.me/{chat.username}/{update.message.message_id}" if chat.username else "(no link)"
+        link = f"https://t.me/{chat.username}/{update.message.message_id}" if chat.username else ""
         for admin_id in admins_db:
             await context.bot.send_message(admin_id, f"📨 Group: @{chat.username or chat.title}\n👤 User: @{user.username or user.first_name}\n🔗 {link}\n\n{update.message.text}")
 
@@ -175,16 +161,16 @@ def main():
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("setwelcome", set_welcome))
-    application.add_handler(CommandHandler("ban", ban))
-    application.add_handler(CommandHandler("unban", unban))
-    application.add_handler(CommandHandler("mute", mute))
-    application.add_handler(CommandHandler("unmute", unmute))
-    application.add_handler(CommandHandler("kick", kick))
-    application.add_handler(CommandHandler("promote", promote))
-    application.add_handler(CommandHandler("demote", demote))
-    application.add_handler(CommandHandler("pin", pin))
-    application.add_handler(CommandHandler("unpin", unpin))
-    application.add_handler(CommandHandler("purge", purge))
+    application.add_handler(CommandHandler("ban", lambda u, c: admin_command(u, c, "ban")))
+    application.add_handler(CommandHandler("unban", lambda u, c: admin_command(u, c, "unban")))
+    application.add_handler(CommandHandler("kick", lambda u, c: admin_command(u, c, "kick")))
+    application.add_handler(CommandHandler("mute", lambda u, c: admin_command(u, c, "mute")))
+    application.add_handler(CommandHandler("unmute", lambda u, c: admin_command(u, c, "unmute")))
+    application.add_handler(CommandHandler("pin", lambda u, c: admin_command(u, c, "pin")))
+    application.add_handler(CommandHandler("unpin", lambda u, c: admin_command(u, c, "unpin")))
+    application.add_handler(CommandHandler("promote", lambda u, c: admin_command(u, c, "promote")))
+    application.add_handler(CommandHandler("demote", lambda u, c: admin_command(u, c, "demote")))
+    application.add_handler(CommandHandler("purge", lambda u, c: admin_command(u, c, "purge")))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, forward_message))
