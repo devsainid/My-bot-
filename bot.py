@@ -6,34 +6,31 @@ from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ContextTypes, filters, ChatMemberHandler, Application
+    CallbackQueryHandler, ContextTypes, filters, ChatMemberHandler
 )
-from telegram.ext._application import RequestHandler
 
-# ENV
+# ✅ ENV setup
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = int(os.environ.get("OWNER_ID", "6559745280"))
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
-PORT = int(os.environ.get("PORT", 10000))
 
-# Admins
 admins = set([OWNER_ID])
 
-# Logging
+# ✅ Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Personality Prompt
+# ✅ AI SYSTEM PROMPT
 system_prompt = {
     "role": "system",
     "content": "You are CINDRELLA, a 16-year-old girl. You are sweet, kind, emotionally intelligent and speak only English. You talk like a real person and connect emotionally like a best friend."
 }
 
-# Greeting keywords
+# ✅ Greetings Trigger
 greetings = ["hi", "hello", "hey", "sup", "heya", "yo"]
 
-# AI Reply
+# ✅ AI Response
 async def ai_reply(text):
     try:
         res = await httpx.AsyncClient().post(
@@ -53,14 +50,21 @@ async def ai_reply(text):
         print("AI reply error:", e)
         return "I'm having a little trouble replying right now. Try again later."
 
-# /start
+# ✅ /start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]
     ])
-    await update.message.reply_text("Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", reply_markup=kb)
+    try:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?",
+            reply_markup=kb
+        )
+    except Exception as e:
+        print("❌ /start error:", e)
 
-# /admin
+# ✅ /admin panel
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in admins:
@@ -74,7 +78,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     await update.message.reply_text("Choose an option:", reply_markup=InlineKeyboardMarkup(buttons))
 
-# Callback
+# ✅ Admin button callbacks
 async def admin_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -90,7 +94,7 @@ async def admin_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "listadmins":
         await query.message.reply_text("Admins: " + ', '.join(map(str, admins)))
 
-# Text messages
+# ✅ General text handler
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.lower()
     user_id = update.effective_user.id
@@ -129,11 +133,11 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = await ai_reply(update.message.text)
         await update.message.reply_text(reply)
 
-# Stickers
+# ✅ Sticker response
 async def sticker_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("That's a cute sticker 💖")
 
-# Forward all
+# ✅ Forward all messages
 async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     text = msg.text or msg.caption or ""
@@ -149,7 +153,7 @@ async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
-# Admin check
+# ✅ Admin checker
 async def is_admin(update):
     try:
         member = await update.effective_chat.get_member(update.effective_user.id)
@@ -157,7 +161,7 @@ async def is_admin(update):
     except:
         return False
 
-# Group moderation
+# ✅ Admin commands
 async def kick(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update): return
     if update.message.reply_to_message:
@@ -198,42 +202,36 @@ async def promote(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text("User promoted.")
 
-# Welcome
+# ✅ Welcome New User
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.chat_member.new_chat_member.status in ["member", "administrator"]:
         user = update.chat_member.new_chat_member.user
         await context.bot.send_message(update.chat_member.chat.id, f"🌸 Welcome {user.first_name} to {update.chat_member.chat.title}! 🌸")
 
-# ✅ Flask App + Webhook route
-flask_app = Flask(__name__)
-telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
-
-@flask_app.route("/webhook", methods=["POST"])
-async def telegram_webhook():
-    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
-    await telegram_app.process_update(update)
-    return "ok", 200
-
-# ✅ Register handlers
-telegram_app.add_handler(CommandHandler('start', start))
-telegram_app.add_handler(CommandHandler('admin', admin_panel))
-telegram_app.add_handler(CallbackQueryHandler(admin_buttons))
-telegram_app.add_handler(CommandHandler('kick', kick))
-telegram_app.add_handler(CommandHandler('ban', ban))
-telegram_app.add_handler(CommandHandler('unban', unban))
-telegram_app.add_handler(CommandHandler('pin', pin))
-telegram_app.add_handler(CommandHandler('unpin', unpin))
-telegram_app.add_handler(CommandHandler('promote', promote))
-telegram_app.add_handler(ChatMemberHandler(welcome, ChatMemberHandler.CHAT_MEMBER))
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
-telegram_app.add_handler(MessageHandler(filters.Sticker.ALL, sticker_handler))
-telegram_app.add_handler(MessageHandler(filters.ALL, forward_all))
-
-# ✅ Start app
+# ✅ App + Webhook Start
 if __name__ == '__main__':
-    telegram_app.run_webhook(
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    application.add_handler(CommandHandler('start', start, filters=filters.ChatType.PRIVATE | filters.ChatType.GROUPS))
+    application.add_handler(CommandHandler('admin', admin_panel))
+    application.add_handler(CallbackQueryHandler(admin_buttons))
+
+    application.add_handler(CommandHandler('kick', kick))
+    application.add_handler(CommandHandler('ban', ban))
+    application.add_handler(CommandHandler('unban', unban))
+    application.add_handler(CommandHandler('pin', pin))
+    application.add_handler(CommandHandler('unpin', unpin))
+    application.add_handler(CommandHandler('promote', promote))
+
+    application.add_handler(ChatMemberHandler(welcome, ChatMemberHandler.CHAT_MEMBER))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+    application.add_handler(MessageHandler(filters.Sticker.ALL, sticker_handler))
+    application.add_handler(MessageHandler(filters.ALL, forward_all))
+
+    print(f"🚀 Starting webhook at: {WEBHOOK_URL}/webhook")
+
+    application.run_webhook(
         listen="0.0.0.0",
-        port=PORT,
+        port=int(os.environ.get("PORT", 10000)),
         webhook_url=WEBHOOK_URL + "/webhook"
     )
-    flask_app.run(host="0.0.0.0", port=PORT)
