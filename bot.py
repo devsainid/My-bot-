@@ -1,9 +1,9 @@
-import os, logging, json, random, re
+import os, logging, json, random, re, datetime
 import httpx
 from flask import Flask
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
-    ChatPermissions, ChatMemberAdministrator, ChatMemberOwner
+    ChatPermissions, ChatMemberAdministrator, ChatMemberOwner, ChatMember
 )
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
@@ -16,18 +16,20 @@ OWNER_ID = int(os.environ.get("OWNER_ID", "6559745280"))
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 ADMIN_IDS = set(json.loads(os.environ.get("ADMIN_IDS", "[]")))
-admins_db = ADMIN_IDS.union({OWNER_ID})
 
+admins_db = ADMIN_IDS.union({OWNER_ID})
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
-welcome_messages = {}
 
-async def has_proper_admin_power(chat_member) -> bool:
+welcome_messages = {}
+usage_count = {"date": str(datetime.date.today()), "count": 0}
+
+async def has_proper_admin_power(chat: ChatMember) -> bool:
     return (
-        isinstance(chat_member, ChatMemberAdministrator) and
-        chat_member.can_restrict_members and
-        chat_member.can_manage_chat
-    ) or isinstance(chat_member, ChatMemberOwner)
+        isinstance(chat, ChatMemberAdministrator) and
+        chat.can_restrict_members and
+        chat.can_manage_chat
+    ) or isinstance(chat, ChatMemberOwner)
 
 async def is_admin(update: Update) -> bool:
     try:
@@ -36,7 +38,7 @@ async def is_admin(update: Update) -> bool:
     except:
         return False
 
-async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | None:
     if update.message.reply_to_message:
         return update.message.reply_to_message.from_user.id
     if context.args:
@@ -63,7 +65,7 @@ async def send_to_admins(context: ContextTypes.DEFAULT_TYPE, text: str):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(
-        "Hey, I'm CINDRELLA 🌹🕯️. a powerful AI and group management bot. Promote me to manage your group or enjoy my chat AI.\n\nBTW How you found me dear 🌹🕯️..?",
+        "Hey, I'm CINDRELLA 🌹🕯️. a powerfull ai chat bot and group management bot. just promote me to manage yor group or use my ai features 💕",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -74,7 +76,7 @@ async def set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not msg:
         return await update.message.reply_text("Please provide a welcome message")
     welcome_messages[update.effective_chat.id] = msg
-    await update.message.reply_text("✅ Welcome message set.")
+    await update.message.reply_text("Welcome message set!")
 
 async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -85,12 +87,49 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 parse_mode="HTML"
             )
 
+openrouter_models = [
+    "openchat/openchat-3.5", "gryphe/mythomax-l2-13b",
+    "undi95/toppy-m-7b", "mistralai/mixtral-8x7b",
+    "nousresearch/nous-capybara-7b", "nousresearch/nous-hermes-2-mixtral",
+    "meta-llama/llama-3-8b-instruct", "intel/neural-chat-7b",
+    "mistralai/mistral-7b-instruct", "openrouter/cinematika-7b"
+]
+
+async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        model = random.choice(openrouter_models)
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "You are CINDRELLA, a sweet, kind 15-year-old anime girl, emotionally intelligent. Always reply in user's language like a real friend."},
+                {"role": "user", "content": update.message.text}
+            ]
+        }
+        async with httpx.AsyncClient() as client:
+            res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+        reply = res.json()["choices"][0]["message"]["content"]
+
+        today = str(datetime.date.today())
+        if usage_count["date"] != today:
+            usage_count["date"] = today
+            usage_count["count"] = 0
+        usage_count["count"] += 1
+
+        await update.message.reply_text(reply[:4096])
+    except Exception as e:
+        await update.message.reply_text("I'm getting upgraded, please try again later 💖")
+
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, action: str):
     if not (await is_admin(update) or update.effective_user.id in admins_db):
         return
     user_id = await get_user_id(update, context)
     if not user_id:
-        return await update.message.reply_text("Reply to a user or provide a valid user ID or @username.")
+        return await update.message.reply_text("Reply to a user or provide a valid username/user ID.")
+
     chat_id = update.effective_chat.id
     try:
         if action == "ban":
@@ -131,7 +170,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, acti
                 except: pass
         await update.message.reply_text(f"✅ Action '{action}' done.")
     except Exception as e:
-        await update.message.reply_text(f"❌ Error: {e}")
+        await update.message.reply_text(f"Error: {e}")
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in admins_db:
@@ -143,7 +182,9 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("➖ Remove Admin", callback_data="remove_admin")],
             [InlineKeyboardButton("📋 List Admins", callback_data="list_admins")]
         ]
-    await update.message.reply_text("Welcome to Admin Panel:", reply_markup=InlineKeyboardMarkup(keyboard))
+    today = usage_count["date"]
+    usage_info = f"\n📊 Replies Today: {usage_count['count']} (Date: {today})"
+    await update.message.reply_text("Welcome to Admin Panel:" + usage_info, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -151,46 +192,18 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
     if user_id not in admins_db:
         return
+
     if query.data == "broadcast":
-        await query.message.reply_text("📢 Send the broadcast message:")
+        await query.message.reply_text("📢 Send me the broadcast message:")
         context.user_data["awaiting_broadcast"] = True
     elif query.data == "add_admin" and user_id == OWNER_ID:
-        await query.message.reply_text("➕ Send user ID to add as admin:")
+        await query.message.reply_text("Send user ID to add as admin:")
         context.user_data["awaiting_add_admin"] = True
     elif query.data == "remove_admin" and user_id == OWNER_ID:
-        await query.message.reply_text("Send user ID to remove:")
+        await query.message.reply_text("Send user ID to remove from admins:")
         context.user_data["awaiting_remove_admin"] = True
     elif query.data == "list_admins":
         await query.message.reply_text(f"Current Admins:\n{json.dumps(list(admins_db), indent=2)}")
-
-openrouter_models = [
-    "openchat/openchat-3.5", "gryphe/mythomax-l2-13b",
-    "undi95/toppy-m-7b", "mistralai/mixtral-8x7b",
-    "nousresearch/nous-capybara-7b", "nousresearch/nous-hermes-2-mixtral",
-    "meta-llama/llama-3-8b-instruct", "intel/neural-chat-7b",
-    "mistralai/mistral-7b-instruct", "openrouter/cinematika-7b"
-]
-
-async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        model = random.choice(openrouter_models)
-        headers = {
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": "You are CINDRELLA, a sweet 15-year-old emotionally intelligent girl. Respond in user's language, behave like a real girl, be kind, smart, and anime-loving."},
-                {"role": "user", "content": update.message.text}
-            ]
-        }
-        async with httpx.AsyncClient() as client:
-            res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
-        reply = res.json()["choices"][0]["message"]["content"]
-        await update.message.reply_text(reply[:4096])
-    except:
-        await update.message.reply_text("💖 I'm being updated by my dev. Thanks for understanding!")
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
@@ -199,10 +212,19 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if context.user_data.get("awaiting_broadcast"):
         context.user_data.pop("awaiting_broadcast")
-        for admin_id in admins_db:
-            try: await context.bot.send_message(chat_id=admin_id, text=f"📢 Broadcast:\n{message.text}")
-            except: pass
-        await message.reply_text("✅ Broadcast sent.")
+        group_count, private_count = 0, 0
+        for dialog in await context.bot.get_updates():
+            try:
+                chat = dialog.effective_chat
+                if chat.type == "private":
+                    await context.bot.send_message(chat.id, message.text)
+                    private_count += 1
+                elif chat.type in ["group", "supergroup"]:
+                    await context.bot.send_message(chat.id, message.text)
+                    group_count += 1
+            except:
+                pass
+        await message.reply_text(f"✅ Broadcast sent to {private_count} private users and {group_count} groups.")
         return
 
     if context.user_data.get("awaiting_add_admin"):
@@ -227,12 +249,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await message.reply_text("❌ Invalid ID.")
         return
 
+    greetings = ["hi", "hello", "hey", "yo", "sup", "hii", "heyy", "heya", " cindy", "cindrella", "gm", "good morning", "gn", "good night"]
+    replies = ["Hey cutie 💖", "hello sir 💕", "Hey master 🌸", "Yo! how’s your day going? ☀️", "Hiiiii bestie ", "Hey sunshine 🌼", "Hi there 👋", " what's up buddy", "Sup sweetie 🍬"]
     mentioned = message.entities and any(e.type == "mention" and bot_username in message.text.lower() for e in message.entities)
     replied_to_bot = message.reply_to_message and message.reply_to_message.from_user.id == context.bot.id
 
-    greetings = ["hi", "hello", "hey", "yo", "sup", "hii", "heyy", "heya", "gm", "good morning", "gn", "good night", "cindy", "cindrella"]
-    if msg.strip() in greetings and not message.entities and not message.reply_to_message:
-        await message.reply_text(random.choice(["Hey cutie 💖", "Hello sir 💕", "Hey master 🌸", "Hi there 👋", "Hey sunshine 🌼"]))
+    if msg in greetings and not message.entities and not message.reply_to_message:
+        await message.reply_text(random.choice(replies))
     elif mentioned or replied_to_bot:
         await ai_reply(update, context)
 
@@ -254,24 +277,23 @@ async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_message(admin_id, f"📨 Group: @{chat.username or chat.title}\n👤 User: @{user.username or user.first_name}\n🔗 {link}\n\n{message.text}")
 
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("I didn't get that command.")
+    await update.message.reply_text("I didn't get that")
 
 def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("setwelcome", set_welcome))
-    app.add_handler(CommandHandler("admin", admin_panel))
-    app.add_handler(CallbackQueryHandler(admin_button_handler))
-
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("setwelcome", set_welcome))
+    application.add_handler(CommandHandler("admin", admin_panel))
+    application.add_handler(CallbackQueryHandler(admin_button_handler))
     for cmd in ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote", "demote", "purge"]:
-        app.add_handler(CommandHandler(cmd, partial(admin_command, action=cmd)))
+        application.add_handler(CommandHandler(cmd, partial(admin_command, action=cmd)))
 
-    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, forward_message), group=0)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text), group=1)
-    app.add_handler(MessageHandler(filters.COMMAND, unknown), group=2)
+    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, forward_message), group=0)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text), group=1)
+    application.add_handler(MessageHandler(filters.COMMAND, unknown), group=2)
 
-    app.run_webhook(
+    application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
         webhook_url=WEBHOOK_URL
