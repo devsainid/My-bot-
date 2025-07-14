@@ -155,7 +155,7 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.message.reply_text("📢 Send the broadcast message:")
         context.user_data["awaiting_broadcast"] = True
     elif query.data == "add_admin" and user_id == OWNER_ID:
-        await query.message.reply_text("Send user ID to add as admin:")
+        await query.message.reply_text("➕ Send user ID to add as admin:")
         context.user_data["awaiting_add_admin"] = True
     elif query.data == "remove_admin" and user_id == OWNER_ID:
         await query.message.reply_text("Send user ID to remove:")
