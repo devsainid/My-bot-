@@ -232,7 +232,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mentioned = message.entities and any(e.type == "mention" and bot_username in message.text.lower() for e in message.entities)
     replied_to_bot = message.reply_to_message and message.reply_to_message.from_user.id == context.bot.id
 
-    greetings = ["hi", "hello", "hey", "yo", "sup", "hii", "heyy", "heya"," cindy", "cindrella", " gm","good morning","gn","good night"]
+    greetings = ["hi", "hello", "hey", "yo", "sup", "hii", "heyy", "heya", " cindy", "cindrella", " gm", "good morning", "gn", "good night"]
     replies = ["Hey cutie 💖", "hello sir 💕", "Hey master 🌸", "Yo! how’s your day going? ☀️", "Hiiiii bestie ", "Hey sunshine 🌼", "Hi there 👋", " what's up buddy", "Sup sweetie 🍬"]
 
     if msg in greetings and not message.entities and not message.reply_to_message:
