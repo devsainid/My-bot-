@@ -9,6 +9,7 @@ from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
     CallbackQueryHandler, ContextTypes, filters
 )
+from functools import partial
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = int(os.environ.get("OWNER_ID", "6559745280"))
@@ -212,8 +213,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mentioned = message.entities and any(e.type == "mention" and bot_username in message.text.lower() for e in message.entities)
     replied_to_bot = message.reply_to_message and message.reply_to_message.from_user.id == context.bot.id
 
-    greetings = ["hi", "hello", "hey", "yo", "sup", "hii", "heyy", "heya"]
-    replies = ["Hey cutie 🥺💖", "Hi love 💕", "Hello darling 🌸", "Yo! how’s your day going? ☀️", "Hiiiii bestie 💖", "Hey sunshine 🌼", "Hi there 👋", "Sup sweetie 🍬"]
+    greetings = ["hi", "hello", "hey", "yo", "sup", "hii", "heyy", "heya"," cindy", "cindrella", " gm","good morning","gn","good night"]
+    replies = ["Hey cutie 💖", "hello sir 💕", "Hey master 🌸", "Yo! how’s your day going? ☀️", "Hiiiii bestie ", "Hey sunshine 🌼", "Hi there 👋", " what's up buddy", "Sup sweetie 🍬"]
 
     if msg in greetings and not message.entities and not message.reply_to_message:
         await message.reply_text(random.choice(replies))
@@ -238,7 +239,7 @@ async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_message(admin_id, f"📨 Group: @{chat.username or chat.title}\n👤 User: @{user.username or user.first_name}\n🔗 {link}\n\n{message.text}")
 
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("I didn't get that, love 💋")
+    await update.message.reply_text("I didn't get that")
 
 def main():
     application = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -247,15 +248,14 @@ def main():
     application.add_handler(CommandHandler("admin", admin_panel))
     application.add_handler(CallbackQueryHandler(admin_button_handler))
     for cmd in ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote", "demote", "purge"]:
-        application.add_handler(CommandHandler(cmd, lambda u, c, cmd=cmd: admin_command(u, c, cmd)))
+        application.add_handler(CommandHandler(cmd, partial(admin_command, action=cmd)))
+
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
 
-    # ✅ Forward first
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, forward_message))
-
-    # Then handle reply/text
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    application.add_handler(MessageHandler(filters.COMMAND, unknown))
+    # Forwarding must come BEFORE handle_text
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, forward_message), group=0)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text), group=1)
+    application.add_handler(MessageHandler(filters.COMMAND, unknown), group=2)
 
     application.run_webhook(
         listen="0.0.0.0",
