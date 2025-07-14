@@ -1,6 +1,6 @@
 import os, logging, json, random, re
 import httpx
-from flask import Flask
+from flask import Flask, request
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
     ChatPermissions, ChatMemberAdministrator, ChatMemberOwner, ChatMember
@@ -63,8 +63,9 @@ async def send_to_admins(context: ContextTypes.DEFAULT_TYPE, text: str):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(
-        "Hey, I'm CINDRELLA 🌹🕯️. a powerfull ai chat bot and group management bot. i can help you to safe your group. just promote me to manage yor group if u dont want to promote me. u can use my ai chat features .BTW How you found me dear 🌹🕯️..?",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        "Hey, I'm CINDRELLA 🌹🕯️ — a powerful AI chat bot and group management bot. I can help keep your group safe, and I love chatting too. Just promote me to manage your group, or simply enjoy my AI replies. BTW, how did you find me, dear? 🌹🕯️",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
     )
 
 async def set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -190,94 +191,65 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         async with httpx.AsyncClient() as client:
             res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
         reply = res.json()["choices"][0]["message"]["content"]
-        await update.message.reply_text(reply[:4096])
+        reply += "\n\n_Powered by OpenRouter.ai_"
+        await update.message.reply_text(reply[:4096], parse_mode="Markdown")
     except:
         await update.message.reply_text("my DEV is trying to up to date me 💖💖  .thanks for understanding.")
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
-    msg = message.text.lower()
-    bot_username = context.bot.username.lower()
-
-    if context.user_data.get("awaiting_broadcast"):
-        context.user_data.pop("awaiting_broadcast")
-        for admin_id in admins_db:
-            try: await context.bot.send_message(chat_id=admin_id, text=f"📢 Broadcast:\n{message.text}")
+    if "awaiting_broadcast" in context.user_data and context.user_data.pop("awaiting_broadcast", False):
+        for uid in admins_db:
+            try:
+                await context.bot.send_message(chat_id=uid, text=update.message.text)
             except: pass
-        await message.reply_text("✅ Broadcast sent.")
         return
-
-    if context.user_data.get("awaiting_add_admin"):
-        context.user_data.pop("awaiting_add_admin")
+    if "awaiting_add_admin" in context.user_data and context.user_data.pop("awaiting_add_admin", False):
         try:
-            admins_db.add(int(message.text.strip()))
-            await message.reply_text("✅ Admin added.")
+            new_admin = int(update.message.text)
+            admins_db.add(new_admin)
+            await update.message.reply_text("Added to admin list.")
         except:
-            await message.reply_text("❌ Invalid ID.")
+            await update.message.reply_text("Invalid ID.")
         return
-
-    if context.user_data.get("awaiting_remove_admin"):
-        context.user_data.pop("awaiting_remove_admin")
+    if "awaiting_remove_admin" in context.user_data and context.user_data.pop("awaiting_remove_admin", False):
         try:
-            rem_id = int(message.text.strip())
-            if rem_id != OWNER_ID:
-                admins_db.discard(rem_id)
-                await message.reply_text("✅ Admin removed.")
-            else:
-                await message.reply_text("❌ Cannot remove owner.")
+            to_remove = int(update.message.text)
+            admins_db.discard(to_remove)
+            await update.message.reply_text("Removed from admin list.")
         except:
-            await message.reply_text("❌ Invalid ID.")
+            await update.message.reply_text("Invalid ID.")
         return
 
-    mentioned = message.entities and any(e.type == "mention" and bot_username in message.text.lower() for e in message.entities)
-    replied_to_bot = message.reply_to_message and message.reply_to_message.from_user.id == context.bot.id
-
-    greetings = ["hi", "hello", "hey", "yo", "sup", "hii", "heyy", "heya", " cindy", "cindrella", " gm", "good morning", "gn", "good night"]
-    replies = ["Hey cutie 💖", "hello sir 💕", "Hey master 🌸", "Yo! how’s your day going? ☀️", "Hiiiii bestie ", "Hey sunshine 🌼", "Hi there 👋", " what's up buddy", "Sup sweetie 🍬"]
-
-    if msg in greetings and not message.entities and not message.reply_to_message:
-        await message.reply_text(random.choice(replies))
-    elif mentioned or replied_to_bot:
+    if update.effective_chat.type == "private":
         await ai_reply(update, context)
 
 async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    chat = update.effective_chat
-    message = update.message
-    bot_username = context.bot.username.lower()
-
-    if chat.type == "private":
-        for admin_id in admins_db:
-            await context.bot.send_message(admin_id, f"📩 Private msg from @{user.username or user.first_name}\n\n{message.text}")
-    elif chat.type in ["group", "supergroup"]:
-        mentioned = message.entities and any(e.type == "mention" and bot_username in message.text.lower() for e in message.entities)
-        replied_to_bot = message.reply_to_message and message.reply_to_message.from_user.id == context.bot.id
-        if mentioned or replied_to_bot:
-            link = f"https://t.me/{chat.username}/{message.message_id}" if chat.username else ""
-            for admin_id in admins_db:
-                await context.bot.send_message(admin_id, f"📨 Group: @{chat.username or chat.title}\n👤 User: @{user.username or user.first_name}\n🔗 {link}\n\n{message.text}")
+    if update.effective_chat.type == "private":
+        await send_to_admins(context, f"📩 Message from {update.effective_user.mention_html()}:\n{update.message.text}")
 
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("I didn't get that")
+    await update.message.reply_text("Unknown command.")
 
 def main():
     application = ApplicationBuilder().token(BOT_TOKEN).build()
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("setwelcome", set_welcome))
-    application.add_handler(CommandHandler("admin", admin_panel))
-    application.add_handler(CallbackQueryHandler(admin_button_handler))
+    application.add_handler(CommandHandler("panel", admin_panel))
     for cmd in ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote", "demote", "purge"]:
         application.add_handler(CommandHandler(cmd, partial(admin_command, action=cmd)))
-
+    application.add_handler(CallbackQueryHandler(admin_button_handler))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, forward_message), group=0)
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text), group=1)
-    application.add_handler(MessageHandler(filters.COMMAND, unknown), group=2)
+    application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, forward_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    application.add_handler(MessageHandler(filters.COMMAND, unknown))
 
     application.run_webhook(
         listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000)),
-        webhook_url=WEBHOOK_URL
+        port=int(os.environ.get("PORT", 8080)),
+        webhook_url=f"{WEBHOOK_URL}/webhook/{BOT_TOKEN}",
+        secret_token=BOT_TOKEN,
+        path=f"/webhook/{BOT_TOKEN}"
     )
 
 if __name__ == "__main__":
