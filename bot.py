@@ -1,5 +1,3 @@
-# Final Fixed Version of CINDRELLA Bot with Mention/Reply Check + OpenRouter 10 Free Models
-
 import os, logging, json, random
 import httpx
 from flask import Flask
@@ -43,7 +41,7 @@ async def send_to_admins(context: ContextTypes.DEFAULT_TYPE, text: str):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(
-        "Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?", 
+        "Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -63,7 +61,8 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if chat_id in welcome_messages:
         for member in update.message.new_chat_members:
             await update.message.reply_text(
-                welcome_messages[chat_id].replace("{name}", member.mention_html()), parse_mode="HTML"
+                welcome_messages[chat_id].replace("{name}", member.mention_html()),
+                parse_mode="HTML"
             )
 
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, action: str):
@@ -75,7 +74,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, acti
         user_id = int(context.args[0]) if context.args else update.message.reply_to_message.from_user.id
     except:
         return await update.message.reply_text("Invalid user ID")
-    
+
     chat_id = update.effective_chat.id
     try:
         if action == "ban":
@@ -97,15 +96,19 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, acti
         elif action == "unpin":
             await context.bot.unpin_chat_message(chat_id)
         elif action == "promote":
-            await context.bot.promote_chat_member(chat_id, user_id, can_manage_chat=True, can_change_info=True,
-                                                  can_delete_messages=True, can_invite_users=True,
-                                                  can_restrict_members=True, can_pin_messages=True,
-                                                  can_promote_members=True)
+            await context.bot.promote_chat_member(chat_id, user_id,
+                can_manage_chat=True, can_change_info=True,
+                can_delete_messages=True, can_invite_users=True,
+                can_restrict_members=True, can_pin_messages=True,
+                can_promote_members=False, is_anonymous=False
+            )
         elif action == "demote":
-            await context.bot.promote_chat_member(chat_id, user_id, can_manage_chat=False, can_change_info=False,
-                                                  can_delete_messages=False, can_invite_users=False,
-                                                  can_restrict_members=False, can_pin_messages=False,
-                                                  can_promote_members=False)
+            await context.bot.promote_chat_member(chat_id, user_id,
+                can_manage_chat=False, can_change_info=False,
+                can_delete_messages=False, can_invite_users=False,
+                can_restrict_members=False, can_pin_messages=False,
+                can_promote_members=False, is_anonymous=True
+            )
         elif action == "purge" and update.message.reply_to_message:
             for msg_id in range(update.message.reply_to_message.message_id, update.message.message_id):
                 try: await context.bot.delete_message(chat_id, msg_id)
@@ -166,8 +169,8 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
         async with httpx.AsyncClient() as client:
             res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
-            reply = res.json()["choices"][0]["message"]["content"]
-            await update.message.reply_text(reply[:4096])
+        reply = res.json()["choices"][0]["message"]["content"]
+        await update.message.reply_text(reply[:4096])
     except:
         await update.message.reply_text("I'm feeling off right now, try again later 💔")
 
@@ -246,9 +249,14 @@ def main():
     for cmd in ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote", "demote", "purge"]:
         application.add_handler(CommandHandler(cmd, lambda u, c, cmd=cmd: admin_command(u, c, cmd)))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
+
+    # ✅ Forward first
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, forward_message))
+
+    # Then handle reply/text
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, forward_message))
     application.add_handler(MessageHandler(filters.COMMAND, unknown))
+
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
