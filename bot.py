@@ -63,7 +63,7 @@ async def send_to_admins(context: ContextTypes.DEFAULT_TYPE, text: str):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(
-        "Hey, I'm CINDRELLA 🌹🕯️. a powerful AI and group management bot. Promote me to manage your group or enjoy my chat AI.\n\nPowered by OpenRouter.ai – an AI gateway connecting top models like OpenChat, Mythomax, and Mistral.\n\nBTW How you found me dear 🌹🕯️..?",
+        "Hey, I'm CINDRELLA 🌹🕯️. a powerful AI and group management bot. Promote me to manage your group or enjoy my chat AI.\n\nBTW How you found me dear 🌹🕯️..?",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
