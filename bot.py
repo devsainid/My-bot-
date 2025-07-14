@@ -42,7 +42,7 @@ async def send_to_admins(context: ContextTypes.DEFAULT_TYPE, text: str):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(
-        "Hey, I'm CINDRELLA 🌹🔯. How you found me dear 🌹🔯..?",
+        "Hey, I'm CINDRELLA 🌹🕯️. a powerfull ai chat bot and group management bot. i can help you to safe your group. just promote me to manage yor group if u dont want to promote me. u can use my ai chat features .BTW How you found me dear 🌹🕯️..?",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -114,7 +114,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, acti
             for msg_id in range(update.message.reply_to_message.message_id, update.message.message_id):
                 try: await context.bot.delete_message(chat_id, msg_id)
                 except: pass
-        await update.message.reply_text(f"✅ Action '{action}' done.")
+        await update.message.reply_text(f"wahho 🎉✅ Action '{action}' done.")
     except Exception as e:
         await update.message.reply_text(f"Error: {e}")
 
@@ -164,7 +164,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         payload = {
             "model": model,
             "messages": [
-                {"role": "system", "content": "You are CINDRELLA, a 16-year-old sweet, kind, emotionally intelligent best friend. Respond in realistic English."},
+                {"role": "system", "content": "You are CINDRELLA, a 15-year-old sweet, kind, emotionally intelligent best friend. always Respond in language which language Using by user. your developer, manager, boyfriend  everything is dev. always behave like a realistic girl. you are too intelligent. you are a gamer. you are good in coding language and you are an anmie lover."},
                 {"role": "user", "content": update.message.text}
             ]
         }
@@ -173,7 +173,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = res.json()["choices"][0]["message"]["content"]
         await update.message.reply_text(reply[:4096])
     except:
-        await update.message.reply_text("I'm feeling off right now, try again later 💔")
+        await update.message.reply_text("my DEV is trying to up to date me 💖💖  .thanks for understanding.")
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
