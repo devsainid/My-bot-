@@ -1,9 +1,9 @@
-import os, logging, json, random
+import os, logging, json, random, re
 import httpx
 from flask import Flask
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
-    ChatPermissions, ChatMemberAdministrator, ChatMemberOwner
+    ChatPermissions, ChatMemberAdministrator, ChatMemberOwner, ChatMember
 )
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
@@ -22,15 +22,36 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 welcome_messages = {}
 
-def is_bot_admin(chat_member):
-    return isinstance(chat_member, ChatMemberAdministrator) or isinstance(chat_member, ChatMemberOwner)
+async def has_proper_admin_power(chat: ChatMember) -> bool:
+    return (
+        isinstance(chat, ChatMemberAdministrator) and
+        chat.can_restrict_members and
+        chat.can_manage_chat
+    ) or isinstance(chat, ChatMemberOwner)
 
 async def is_admin(update: Update) -> bool:
     try:
         member = await update.effective_chat.get_member(update.effective_user.id)
-        return is_bot_admin(member)
+        return await has_proper_admin_power(member)
     except:
         return False
+
+async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | None:
+    if update.message.reply_to_message:
+        return update.message.reply_to_message.from_user.id
+    if context.args:
+        arg = context.args[0]
+        if re.fullmatch(r"@\w{5,}", arg):
+            try:
+                user = await context.bot.get_chat(arg)
+                return user.id
+            except:
+                return None
+        try:
+            return int(arg)
+        except:
+            return None
+    return None
 
 async def send_to_admins(context: ContextTypes.DEFAULT_TYPE, text: str):
     for admin_id in admins_db:
@@ -47,10 +68,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_chat.type != "supergroup":
-        return
-    if not (update.effective_user.id in admins_db or await is_admin(update)):
-        return
+    if update.effective_chat.type != "supergroup": return
+    if not (await is_admin(update) or update.effective_user.id in admins_db): return
     msg = " ".join(context.args)
     if not msg:
         return await update.message.reply_text("Please provide a welcome message")
@@ -69,12 +88,9 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, action: str):
     if not (await is_admin(update) or update.effective_user.id in admins_db):
         return
-    if not context.args and not update.message.reply_to_message:
-        return await update.message.reply_text("Reply to a user or provide a user ID.")
-    try:
-        user_id = int(context.args[0]) if context.args else update.message.reply_to_message.from_user.id
-    except:
-        return await update.message.reply_text("Invalid user ID")
+    user_id = await get_user_id(update, context)
+    if not user_id:
+        return await update.message.reply_text("Reply to a user or provide a valid username/user ID.")
 
     chat_id = update.effective_chat.id
     try:
@@ -160,11 +176,14 @@ openrouter_models = [
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         model = random.choice(openrouter_models)
-        headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
         payload = {
             "model": model,
             "messages": [
-                {"role": "system", "content": "You are CINDRELLA, a 15-year-old sweet, kind, emotionally intelligent best friend. always Respond in language which language Using by user. your developer, manager, boyfriend  everything is dev. always behave like a realistic girl. you are too intelligent. you are a gamer. you are good in coding language and you are an anmie lover."},
+                {"role": "system", "content": "You are CINDRELLA, a 15-year-old sweet, kind, emotionally intelligent best friend. always respond in user's language. behave like a real girl. you're smart, a gamer, and anime lover."},
                 {"role": "user", "content": update.message.text}
             ]
         }
@@ -251,8 +270,6 @@ def main():
         application.add_handler(CommandHandler(cmd, partial(admin_command, action=cmd)))
 
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
-
-    # Forwarding must come BEFORE handle_text
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, forward_message), group=0)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text), group=1)
     application.add_handler(MessageHandler(filters.COMMAND, unknown), group=2)
