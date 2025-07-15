@@ -102,8 +102,12 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 {"role": "user", "content": update.message.text}
             ]
         }
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+        if res.status_code != 200:
+            logging.error(f"OpenRouter API Error: {res.status_code} - {res.text}")
+            raise Exception("API response error")
+
         reply = res.json()["choices"][0]["message"]["content"]
 
         today = str(datetime.date.today())
@@ -114,9 +118,8 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(reply[:4096])
     except Exception as e:
-        logging.error("OpenRouter error", exc_info=e)
+        logging.error("AI REPLY FAILED", exc_info=e)
         await update.message.reply_text("I'm being upgraded, try again shortly 💖")
-
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, action: str):
     if not (await is_admin(update) or update.effective_user.id in admins_db):
         return
