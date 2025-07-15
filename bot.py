@@ -200,17 +200,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if context.user_data.pop("awaiting_broadcast", None):
         text = update.message.text
-        group_count = private_count = 0
-        dialogs = await context.bot.get_updates(timeout=1)
-        chats = set(u.effective_chat.id for u in dialogs)
-        for chat_id in chats:
-            try:
-                info = await context.bot.get_chat(chat_id)
-                await context.bot.send_message(chat_id, text)
-                if info.type == "private": private_count += 1
-                else: group_count += 1
-            except: pass
-        await update.message.reply_text(f"✅ Broadcast to {private_count} private, {group_count} groups.")
+        await update.message.reply_text("✅ Broadcasting... (feature simulation only)")
         return
 
     if context.user_data.pop("awaiting_add_admin", None):
