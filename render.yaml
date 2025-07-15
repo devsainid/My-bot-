@@ -11,6 +11,6 @@ services:
       - key: OWNER_ID
         value: "6559745280"
       - key: OPENROUTER_API_KEY
-        value: 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
+        value: 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
       - key: WEBHOOK_URL
         value: https://my-bot-l8bf.onrender.com/webhook
