@@ -7,10 +7,10 @@ services:
     startCommand: python bot.py
     envVars:
       - key: BOT_TOKEN
-        value: 7604364226:AAFzrc-Vp1C9bysTTnec2YhozEO-cei_iAg
+        sync: false
       - key: OWNER_ID
-        value: "6559745280"
+        sync: false
       - key: OPENROUTER_API_KEY
-        value: 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
+        sync: false
       - key: WEBHOOK_URL
-        value: https://my-bot-l8bf.onrender.com/webhook
+        sync: false
