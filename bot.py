@@ -103,19 +103,43 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
         }
         async with httpx.AsyncClient() as client:
-            res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
-        reply = res.json()["choices"][0]["message"]["content"]
+        async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message_text = update.message.text
+    user_lang = update.message.from_user.language_code or "en"
 
-        today = str(datetime.date.today())
-        if usage_count["date"] != today:
-            usage_count["date"] = today
-            usage_count["count"] = 0
-        usage_count["count"] += 1
+    today = str(datetime.date.today())
+    if usage_count["date"] != today:
+        usage_count["date"] = today
+        usage_count["count"] = 0
 
-        await update.message.reply_text(reply[:4096])
-    except Exception as e:
-        logging.error("OpenRouter error", exc_info=e)
-        await update.message.reply_text("I'm being upgraded, try again shortly 💖")
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    for model in openrouter_models:
+        try:
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": f"You are CINDRELLA,a sweet 15-year-old gamer. Always act friendly and reply in the user’s language ({user_lang}) like a real buddy. always reply in few words. your developer,owner,boyfriend,babe,programmer,everything is dev,always reply like a gantle,intelligent lady."},
+                    {"role": "user", "content": message_text}
+                ]
+            }
+            async with httpx.AsyncClient(timeout=20) as client:
+                res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+                if res.status_code == 200:
+                    reply = res.json()["choices"][0]["message"]["content"]
+                    usage_count["count"] += 1
+                    return await update.message.reply_text(reply[:4096])
+                else:
+                    logging.warning(f"{model} failed: {res.status_code} — {res.text}")
+        except Exception as e:
+            logging.warning(f"Model {model} error: {e}")
+            continue
+
+    # If all models fail
+    await update.message.reply_text("I'm being upgraded, try again shortly 💖")
 
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, action: str):
     if not (await is_admin(update) or update.effective_user.id in admins_db):
@@ -150,7 +174,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, acti
                 can_manage_chat=False, can_change_info=False,
                 can_delete_messages=False, can_invite_users=False,
                 can_restrict_members=False, can_pin_messages=False,
-                can_promote_members=False, is_anonymous=True)
+                can_promote_members=False, is_anonymous=False)
         elif action == "purge" and update.message.reply_to_message:
             for msg_id in range(update.message.reply_to_message.message_id, update.message.message_id):
                 try: await context.bot.delete_message(chat_id, msg_id)
