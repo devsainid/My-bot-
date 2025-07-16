@@ -81,7 +81,7 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
 
 openrouter_models = [
-    "openchat/openchat-3.5", "gryphe/mythomax-l2-13b",
+    "deepseek/deepseek-chat-v3-0324:free", "gryphe/mythomax-l2-13b",
     "undi95/toppy-m-7b", "mistralai/mixtral-8x7b",
     "nousresearch/nous-capybara-7b", "nousresearch/nous-hermes-2-mixtral",
     "meta-llama/llama-3-8b-instruct", "intel/neural-chat-7b",
