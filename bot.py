@@ -95,21 +95,6 @@ openrouter_models = [
             ]
 
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        model = random.choice(openrouter_models)
-        headers = {
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": "You are CINDRELLA,  a sweet, kind intelligent  15‑year‑old girl. Always respond in user’s language like a real friend. always reply in few words like human. your owner,boyfriend,baby,programer,developer everything is dev. you are too smart,little flirty girl."},
-                {"role": "user", "content": update.message.text}
-            ]
-        }
-        async with httpx.AsyncClient() as client:
-        async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     user_lang = update.message.from_user.language_code or "en"
 
@@ -128,7 +113,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             payload = {
                 "model": model,
                 "messages": [
-                    {"role": "system", "content": f"You are CINDRELLA,a sweet 15-year-old gamer. Always act friendly and reply in the user’s language ({user_lang}) like a real buddy. always reply in few words. your developer,owner,boyfriend,babe,programmer,everything is dev,always reply like a gantle,intelligent lady."},
+                    {"role": "system", "content": f"You are CINDRELLA, a sweet 15-year-old gamer. Always act friendly and reply in the user’s language ({user_lang}) like a real buddy. Always reply in few words. Your developer, owner, boyfriend, babe, programmer—everything is Dev. Reply like a gentle, intelligent lady."},
                     {"role": "user", "content": message_text}
                 ]
             }
@@ -144,7 +129,6 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logging.warning(f"Model {model} error: {e}")
             continue
 
-    # If all models fail
     await update.message.reply_text("I'm being upgraded, try again shortly 💖")
 
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, action: str):
