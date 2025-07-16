@@ -81,12 +81,18 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
 
 openrouter_models = [
-    "deepseek/deepseek-chat-v3-0324:free", "gryphe/mythomax-l2-13b",
-    "undi95/toppy-m-7b", "mistralai/mixtral-8x7b",
-    "nousresearch/nous-capybara-7b", "nousresearch/nous-hermes-2-mixtral",
-    "meta-llama/llama-3-8b-instruct", "intel/neural-chat-7b",
-    "mistralai/mistral-7b-instruct", "openrouter/cinematika-7b"
-]
+    "deepseek/deepseek-chat-v3-0324:free",
+    "cyberagent/cyberalpha-7b",
+    "mistralai/mixtral-8x7b",
+    "meta-llama/llama-3-8b-instruct",
+    "gryphe/mythomax-l2-13b",
+    "openchat/openchat-3.5",
+    "mistralai/mistral-7b-instruct",
+    "openrouter/cinematika-7b",
+    "undi95/toppy-m-7b",
+    "intel/neural-chat-7b",
+    "nousresearch/nous-capybara-7b"
+            ]
 
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
