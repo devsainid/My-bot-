@@ -1,4 +1,10 @@
-import os, logging, json, random, re, datetime
+# bot.py - CINDRELLA final
+import os
+import logging
+import json
+import random
+import re
+import datetime
 import httpx
 from flask import Flask
 from telegram import (
@@ -10,7 +16,11 @@ from telegram.ext import (
     CallbackQueryHandler, ContextTypes, filters
 )
 from functools import partial
+from datetime import date, datetime as dt, time as dt_time, timedelta
+from zoneinfo import ZoneInfo
+from collections import defaultdict
 
+# ----------------- CONFIG -----------------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = int(os.environ.get("OWNER_ID", "6559745280"))
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
@@ -21,9 +31,41 @@ admins_db = ADMIN_IDS.union({OWNER_ID})
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
-welcome_messages = {}
-usage_count = {"date": str(datetime.date.today()), "count": 0}
+# ----------------- STATE -----------------
+usage_count = {"date": str(date.today()), "count": 0}
 
+# seen members pool per chat (id -> {name, is_bot})
+seen_members = defaultdict(dict)
+
+# couple per-chat store
+couples_db = {}
+# couples_db[chat_id] = {"date": "YYYY-MM-DD", "pair": ((id1,name1),(id2,name2))}
+
+# random welcome messages
+WELCOME_MESSAGES = [
+    "Welcome {name}! ✨ Glad you're here — have fun!",
+    "Hey {name} 👋 — nice to see you! Introduce yourself 😄",
+    "A lovely hello to {name} 🌸 — welcome to the fam!",
+    "Oye {name} 😍 — welcome! Ready to vibe?",
+    "Yay! {name} joined — bring snacks 🍪 and good mood 😏",
+    "Welcome, {name}! Make yourself at home 💖",
+    "What's up {name}? Get ready for chaos and cuddles 😂",
+    "Oh hello {name} — you're in the best group now 😎",
+    "Shoutout to {name} for joining! 🎉 Stay fun and kind.",
+    "{name} has arrived — time to make memories 🥳"
+]
+
+# ---------- Helpers ----------
+def _display_name(user):
+    # prefer full name or first_name or username
+    name = getattr(user, "full_name", None) or getattr(user, "first_name", None) or getattr(user, "username", None) or "User"
+    return str(name)
+
+def mention_html(user_id: int, name: str) -> str:
+    safe = (name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+    return f'<a href="tg://user?id={user_id}">{safe}</a>'
+
+# ------------- Admin checks --------------
 async def has_proper_admin_power(member: ChatMember) -> bool:
     return (
         isinstance(member, ChatMemberAdministrator) and
@@ -57,6 +99,7 @@ async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
     return None
 
+# ------------- Start ---------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(
@@ -64,27 +107,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-async def set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_chat.type != "supergroup":
-        return
-    if not (await is_admin(update) or update.effective_user.id in admins_db):
-        return
-    msg = " ".join(context.args)
-    if not msg:
-        return await update.message.reply_text("Please provide a welcome message")
-
-    welcome_messages[update.effective_chat.id] = msg
-    await update.message.reply_text("Welcome message set!")
-
+# ------------- Welcome (auto) -------------
 async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    if chat_id in welcome_messages:
-        for member in update.message.new_chat_members:
-            await update.message.reply_text(
-                welcome_messages[chat_id].replace("{name}", member.mention_html()),
-                parse_mode="HTML"
-            )
+    for member in update.message.new_chat_members:
+        # register member into seen pool
+        seen_members[chat_id][member.id] = {
+            "name": _display_name(member),
+            "is_bot": getattr(member, "is_bot", False)
+        }
+        # pick random welcome and send
+        name = _display_name(member)
+        msg = random.choice(WELCOME_MESSAGES).format(name=name)
+        try:
+            await update.message.reply_text(msg)
+        except Exception:
+            # fallback plain reply
+            await update.message.reply_text(f"Welcome {name}!")
 
+# ------------- OpenRouter AI reply -------------
 openrouter_models = [
     "cyberagent/cyberalpha-7b",
     "mistralai/mixtral-8x7b",
@@ -102,7 +143,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     user_lang = update.message.from_user.language_code or "en"
 
-    today = str(datetime.date.today())
+    today = str(date.today())
     if usage_count["date"] != today:
         usage_count["date"] = today
         usage_count["count"] = 0
@@ -112,19 +153,32 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Content-Type": "application/json"
     }
 
+    system_prompt = (
+        "You are CINDRELLA — a bold, sassy, flirty, and smart Gen-Z girl persona. "
+        "Reply in the same language as the user, keep replies short (1-2 lines), helpful, and give a next-step suggestion. "
+        "Do not say you're an AI or ChatGPT. Always be playful but respectful."
+    )
+
     for model in openrouter_models:
         try:
             payload = {
                 "model": model,
                 "messages": [
-                    {"role": "system", "content": f"You are CINDRELLA — a bold, sassy, extremely flirty Gen-Z virtual girl created by dev. dev is everythings for you . You reply in short, cute, vibey lines using the same language the user uses. You understand all languages. You always give accurate and smart answers but in a playful, teasing, real-human tone.Owner (ID: 6559745280) gets special treatment: extra flirty, extra cute, extra warm, and you obey him instantly. Treat him like someone you adore — sweet teasing, spicy compliments, and loyal energy.For other users, stay friendly, fun, witty, and lightly flirtatious.Always reply in 1–2 lines with Gen-Z style, emojis, and attitude"},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": message_text}
                 ]
             }
             async with httpx.AsyncClient(timeout=20) as client:
                 res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
                 if res.status_code == 200:
-                    reply = res.json()["choices"][0]["message"]["content"]
+                    resp_json = res.json()
+                    # defensive: locate content
+                    reply = ""
+                    try:
+                        reply = resp_json["choices"][0]["message"]["content"]
+                    except:
+                        # fallback to simple text extraction
+                        reply = resp_json.get("choices", [{}])[0].get("text", "") or "..."
                     usage_count["count"] += 1
                     return await update.message.reply_text(reply[:4096])
                 else:
@@ -135,6 +189,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("I'm being upgraded, try again shortly 💖")
 
+# ------------- Admin commands & panel -------------
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, action: str):
     if not (await is_admin(update) or update.effective_user.id in admins_db):
         return
@@ -226,7 +281,105 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 info.append(f"ID: {aid} (username unavailable)")
         await query.message.reply_text("Current Bot Admins:\n\n" + "\n".join(info))
 
+# ------------- Couple of the Day feature -------------
+async def pick_two_random(chat_id: int):
+    pool = [
+        (uid, info["name"])
+        for uid, info in seen_members[chat_id].items()
+        if not info.get("is_bot", False)
+    ]
+    if len(pool) < 2:
+        return None
+    pair = random.sample(pool, 2)
+    return (pair[0], pair[1])
+
+async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    sender = update.effective_user
+
+    # register sender
+    seen_members[chat_id][sender.id] = {
+        "name": _display_name(sender),
+        "is_bot": getattr(sender, "is_bot", False)
+    }
+
+    today_str = str(date.today())
+
+    # if exists for today -> tag same pair & wishes
+    existing = couples_db.get(chat_id)
+    if existing and existing.get("date") == today_str and existing.get("pair"):
+        (id1, name1), (id2, name2) = existing["pair"]
+        text = (
+            f"💞 Couple of the Day (still):\n"
+            f"{mention_html(id1, name1)}\n"
+            f"{mention_html(id2, name2)}\n\n"
+            f"Lots of love and wishes! 😘🎉\n"
+            f"May your day be full of smiles ❤️"
+        )
+        return await update.message.reply_text(text, parse_mode="HTML")
+
+    # pick fresh pair
+    picked = await pick_two_random(chat_id)
+    if not picked:
+        # fallback: add chat admins to pool and retry
+        try:
+            admins = await context.bot.get_chat_administrators(chat_id)
+            for a in admins:
+                u = a.user
+                seen_members[chat_id][u.id] = {"name": _display_name(u), "is_bot": u.is_bot}
+            picked = await pick_two_random(chat_id)
+        except Exception:
+            picked = None
+
+    if not picked:
+        return await update.message.reply_text("Not enough active members yet to make a couple. Wait for more people to chat ❤️")
+
+    ((id1, name1), (id2, name2)) = picked
+    couples_db[chat_id] = {"date": today_str, "pair": ((id1, name1), (id2, name2))}
+
+    wishes = [
+        "Awwww this is cute 😍",
+        "May your chats be full of love 💖",
+        "Couple vibes ON 🔥",
+        "Tag each other and pose for the profile pic 😏",
+        "Loads of kisses and good luck 😘",
+        "Stay sweet and silly together 💫"
+    ]
+    wish_text = "\n".join(random.sample(wishes, k=min(3, len(wishes))))
+
+    text = (
+        f"💘 *Couple of the Day* 💘\n"
+        f"{mention_html(id1, name1)}  +  {mention_html(id2, name2)}\n\n"
+        f"{wish_text}\n\n"
+        f"Use /couple again to shower them with love today! 🌹"
+    )
+    return await update.message.reply_text(text, parse_mode="HTML")
+
+# daily reset job at 1:00 AM IST
+async def couple_daily_reset(context: ContextTypes.DEFAULT_TYPE):
+    logging.info("Running daily couple reset (1:00 AM IST)")
+    couples_db.clear()
+    # keep seen_members to preserve pool
+    # optionally you can prune old seen_members here
+
+# ------------- Register senders helper (called in message handlers) -------------
+def register_sender_from_update(update: Update):
+    try:
+        chat_id = update.effective_chat.id
+        user = update.effective_user
+        if user:
+            seen_members[chat_id][user.id] = {
+                "name": _display_name(user),
+                "is_bot": getattr(user, "is_bot", False)
+            }
+    except Exception:
+        pass
+
+# ------------- Message handlers -------------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # register sender for couple pool
+    register_sender_from_update(update)
+
     msg = update.message.text.lower()
     bot_username = context.bot.username.lower()
 
@@ -276,14 +429,20 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await ai_reply(update, context)
 
 async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # register sender for couple pool
+    register_sender_from_update(update)
+
     user = update.effective_user
     chat = update.effective_chat
-    text = update.message.text
+    text = update.message.text or ""
     bot_username = context.bot.username.lower()
 
     if chat.type == "private":
         for aid in admins_db:
-            await context.bot.send_message(aid, f"📩 Private from @{user.username or user.first_name}:\n{text}")
+            try:
+                await context.bot.send_message(aid, f"📩 Private from @{user.username or user.first_name}:\n{text}")
+            except:
+                pass
 
     elif chat.type in ["group", "supergroup"]:
         mentioned = update.message.entities and any(e.type=="mention" and bot_username in text.lower() for e in update.message.entities)
@@ -292,27 +451,41 @@ async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if mentioned or replied:
             link = f"https://t.me/{chat.username}/{update.message.message_id}" if chat.username else ""
             for aid in admins_db:
-                await context.bot.send_message(
-                    aid,
-                    f"📨 @{chat.username or chat.title} by @{user.username or user.first_name}\n🔗{link}\n\n{text}"
-                )
+                try:
+                    await context.bot.send_message(
+                        aid,
+                        f"📨 @{chat.username or chat.title} by @{user.username or user.first_name}\n🔗{link}\n\n{text}"
+                    )
+                except:
+                    pass
 
+# ------------- MAIN & Dispatcher -------------
 def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("setwelcome", set_welcome))
-    app.add_handler(CommandHandler("admin", admin_panel))
-    app.add_handler(CallbackQueryHandler(admin_button_handler))
+    # Commands
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("admin", admin_panel))
+    application.add_handler(CallbackQueryHandler(admin_button_handler))
 
+    # moderation commands
     for cmd in ["ban","unban","kick","mute","unmute","pin","unpin","promote","demote","purge"]:
-        app.add_handler(CommandHandler(cmd, partial(admin_command, action=cmd)))
+        application.add_handler(CommandHandler(cmd, partial(admin_command, action=cmd)))
 
-    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, forward_message), group=0)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text), group=1)
+    # couple command
+    application.add_handler(CommandHandler("couple", couple_command))
 
-    app.run_webhook(
+    # message handlers
+    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, forward_message), group=0)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text), group=1)
+
+    # Schedule daily reset at 1:00 AM IST
+    ist = ZoneInfo("Asia/Kolkata")
+    application.job_queue.run_daily(couple_daily_reset, time=dt_time(hour=1, minute=0, tzinfo=ist))
+
+    # Run webhook
+    application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
         webhook_url=WEBHOOK_URL
