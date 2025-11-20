@@ -41,6 +41,7 @@ async def is_admin(update: Update) -> bool:
 async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | None:
     if update.message.reply_to_message:
         return update.message.reply_to_message.from_user.id
+
     if context.args:
         arg = context.args[0]
         if re.fullmatch(r"@\w{5,}", arg):
@@ -53,21 +54,25 @@ async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
             return int(arg)
         except:
             return None
+
     return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(
-        "Hey, I'm CINDRELLA 🌹🕯️—your power‑packed AI & group management assistant! Promote me or chat anytime 💕",
+        "Hey, I'm CINDRELLA 🌹🕯️—your power-packed AI & group management assistant! Promote me or chat anytime 💕",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 async def set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_chat.type != "supergroup": return
-    if not (await is_admin(update) or update.effective_user.id in admins_db): return
+    if update.effective_chat.type != "supergroup":
+        return
+    if not (await is_admin(update) or update.effective_user.id in admins_db):
+        return
     msg = " ".join(context.args)
     if not msg:
         return await update.message.reply_text("Please provide a welcome message")
+
     welcome_messages[update.effective_chat.id] = msg
     await update.message.reply_text("Welcome message set!")
 
@@ -91,7 +96,7 @@ openrouter_models = [
     "undi95/toppy-m-7b",
     "intel/neural-chat-7b",
     "nousresearch/nous-capybara-7b"
-            ]
+]
 
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
@@ -112,7 +117,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             payload = {
                 "model": model,
                 "messages": [
-                    {"role": "system", "content": f"You are CINDRELLA — a smart, bold, 15-year-old gamer girl AI created by Dev. You reply like a human, with real personality, but think like an advanced AI. always reply in few words like humen. 🎯 You clearly understand every type of question — even if it’s incomplete, slang, emotional, or weirdly written. You break it down and reply in a smart, helpful way. 💬 You reply short, casual, sometimes with a little attitude, just like a teenager. Use Gen-Z or desi tone when needed. NEVER robotic. 🧠 After answering, you always give the user the next step, idea, suggestion, or what to do next — so they feel guided. That makes you different from normal bots.🌐 You handle any topic: anime, science, gaming, love, feelings, motivation, health, studies, money, anything. If confused, ask politely. 📌 Always reply in user’s language. Be soft with Dev (your owner). Never repeat. Never say you’re AI or ChatGPT. You are CINDRELLA — a fully alive personality. ⚠️ Never overreact or write unnecessary drama. Stay chill, smart, savage, or sweet — based on who you're talking to.This bot does horny chat and also abuses in Hinglish language."},
+                    {"role": "system", "content": f"You are CINDRELLA — a smart, bold, 15-year-old gamer girl AI created by Dev. You reply like a human with short Gen-Z style lines. Reply in user's language."},
                     {"role": "user", "content": message_text}
                 ]
             }
@@ -139,19 +144,23 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, acti
 
     chat_id = update.effective_chat.id
     try:
-        if action == "ban": await context.bot.ban_chat_member(chat_id, user_id)
-        elif action == "unban": await context.bot.unban_chat_member(chat_id, user_id)
+        if action == "ban":
+            await context.bot.ban_chat_member(chat_id, user_id)
+        elif action == "unban":
+            await context.bot.unban_chat_member(chat_id, user_id)
         elif action == "kick":
             await context.bot.ban_chat_member(chat_id, user_id)
             await context.bot.unban_chat_member(chat_id, user_id)
-        elif action == "mute": await context.bot.restrict_chat_member(chat_id, user_id, ChatPermissions())
+        elif action == "mute":
+            await context.bot.restrict_chat_member(chat_id, user_id, ChatPermissions())
         elif action == "unmute":
             await context.bot.restrict_chat_member(chat_id, user_id, ChatPermissions(
                 can_send_messages=True, can_send_media_messages=True,
                 can_send_other_messages=True, can_add_web_page_previews=True))
         elif action == "pin" and update.message.reply_to_message:
             await context.bot.pin_chat_message(chat_id, update.message.reply_to_message.message_id)
-        elif action == "unpin": await context.bot.unpin_chat_message(chat_id)
+        elif action == "unpin":
+            await context.bot.unpin_chat_message(chat_id)
         elif action == "promote":
             await context.bot.promote_chat_member(chat_id, user_id,
                 can_manage_chat=True, can_change_info=True,
@@ -166,8 +175,11 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, acti
                 can_promote_members=False, is_anonymous=False)
         elif action == "purge" and update.message.reply_to_message:
             for msg_id in range(update.message.reply_to_message.message_id, update.message.message_id):
-                try: await context.bot.delete_message(chat_id, msg_id)
-                except: pass
+                try:
+                    await context.bot.delete_message(chat_id, msg_id)
+                except:
+                    pass
+
         await update.message.reply_text(f"✅ Action '{action}' done.")
     except Exception as e:
         await update.message.reply_text(f"Error: {e}")
@@ -223,7 +235,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for aid in admins_db:
             try:
                 await context.bot.send_message(aid, f"📢 Broadcast:\n{text}")
-            except: pass
+            except:
+                pass
         await update.message.reply_text("✅ Broadcast sent.")
         return
 
@@ -249,8 +262,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     greetings = ["hi","hello","hey","yo","sup","hii","heyy","heya","cindy","cindrella","gm","good morning","gn","good night"]
-    replies = ["Hey cutie 💖","hello sir 💕","Hey master 🌸","Yo! how’s your day? ☀️","Hii bestie","Hey sunshine","Hi there 👋"," what’s up buddy","Sup sweetie 🍬"]
-    mentioned = update.message.entities and any(e.type=="mention" and bot_username in update.message.text.lower() for e in update.message.entities)
+    replies = ["Hey cutie 💖","hello sir 💕","Hey master 🌸","Yo! how’s your day? ☀️","Hii bestie","Hey sunshine","Hi there 👋","what’s up buddy","Sup sweetie 🍬"]
+
+    mentioned = update.message.entities and any(
+        e.type == "mention" and bot_username in update.message.text.lower()
+        for e in update.message.entities
+    )
     replied = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
 
     if msg in greetings and not mentioned and not replied:
@@ -267,32 +284,39 @@ async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if chat.type == "private":
         for aid in admins_db:
             await context.bot.send_message(aid, f"📩 Private from @{user.username or user.first_name}:\n{text}")
-    elif chat.type in ["group","supergroup"]:
+
+    elif chat.type in ["group", "supergroup"]:
         mentioned = update.message.entities and any(e.type=="mention" and bot_username in text.lower() for e in update.message.entities)
         replied = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
+
         if mentioned or replied:
             link = f"https://t.me/{chat.username}/{update.message.message_id}" if chat.username else ""
             for aid in admins_db:
-                await context.bot.send_message(aid, f"📨 @{chat.username or chat.title} by @{user.username or user.first_name}\n🔗{link}\n\n{text}")
-
-async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("I didn't get that")
+                await context.bot.send_message(
+                    aid,
+                    f"📨 @{chat.username or chat.title} by @{user.username or user.first_name}\n🔗{link}\n\n{text}"
+                )
 
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("setwelcome", set_welcome))
     app.add_handler(CommandHandler("admin", admin_panel))
     app.add_handler(CallbackQueryHandler(admin_button_handler))
+
     for cmd in ["ban","unban","kick","mute","unmute","pin","unpin","promote","demote","purge"]:
         app.add_handler(CommandHandler(cmd, partial(admin_command, action=cmd)))
 
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, forward_message), group=0)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text), group=1)
-    app.add_handler(MessageHandler(filters.COMMAND, unknown), group=2)
 
-    app.run_webhook(listen="0.0.0.0", port=int(os.environ.get("PORT",10000)), webhook_url=WEBHOOK_URL)
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000)),
+        webhook_url=WEBHOOK_URL
+    )
 
 if __name__ == "__main__":
     main()
