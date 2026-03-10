@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Moderation + Purge + Permissions)
+# bot.py - CINDRELLA final (Moderation + Purge + Permissions + Pro Features)
 import os
 import logging
 import json
@@ -6,6 +6,7 @@ import random
 import re
 import httpx
 import asyncio
+import time
 from flask import Flask
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
@@ -44,6 +45,14 @@ usage_count = {"date": str(date.today()), "count": 0}
 seen_members = defaultdict(dict)
 couples_db = {}
 
+# Naye State Variables
+warnings_db = defaultdict(lambda: defaultdict(int)) # chat_id -> user_id -> warning count
+afk_db = {} # user_id -> {"reason": reason, "time": timestamp, "name": name}
+blacklist_db = defaultdict(set) # chat_id -> set of blacklisted words
+filters_db = defaultdict(dict) # chat_id -> word -> reply
+rules_db = {} # chat_id -> rules text
+spam_tracker = defaultdict(lambda: defaultdict(list)) # chat_id -> user_id -> list of timestamps
+
 # Random welcome messages
 WELCOME_MESSAGES = [
     "Welcome {name}! ✨ Glad you're here — have fun!",
@@ -52,6 +61,8 @@ WELCOME_MESSAGES = [
     "Oye {name} 😍 — welcome! Ready to vibe?",
     "Welcome, {name}! Make yourself at home 💖"
 ]
+
+WELCOME_IMAGE_URL = "https://i.pinimg.com/originals/7e/15/d4/7e15d482bb4bc0a8523a5e840a15865d.gif"
 
 # ---------- Helpers ----------
 def _display_name(user):
@@ -110,11 +121,11 @@ async def check_rights(update: Update, action: str) -> bool:
 
         # Admin specific checks
         if isinstance(member, ChatMemberAdministrator):
-            if action in ["ban", "kick", "mute", "unban", "unmute"]:
+            if action in ["ban", "kick", "mute", "unban", "unmute", "warn", "unwarn"]:
                 return member.can_restrict_members
             if action in ["pin", "unpin"]:
                 return member.can_pin_messages
-            if action in ["purge", "purgeall", "purgegroup"]:
+            if action in ["purge", "purgeall", "purgegroup", "filter", "blacklist", "rules"]:
                 return member.can_delete_messages
             if action in ["promote", "demote"]:
                 return member.can_promote_members
@@ -286,6 +297,143 @@ async def purge_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except BadRequest:
         await update.message.reply_text("❌ Messages too old/already deleted.")
 
+# ------------- PRO FEATURES (NEW) -------------
+
+async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = """
+🌹 **CINDRELLA COMMANDS** 🌹
+
+**🛠 Moderation:**
+`/ban` - Ban a user
+`/unban` - Unban a user
+`/kick` - Kick a user
+`/mute` - Mute a user
+`/unmute` - Unmute a user
+`/pin` - Pin a message
+`/unpin` - Unpin a message
+`/promote` - Promote a user to Admin
+`/warn` - Warn a user (3 warns = mute/kick)
+`/unwarn` - Remove a warning
+
+**🧹 Purge:**
+`/purge` - Delete messages from reply to current
+`/purgeall` - Delete all messages of a user
+`/purgegroup` - Delete last 100 messages
+
+**🛡 Group Management:**
+`/addblacklist <word>` - Auto delete bad word
+`/rmblacklist <word>` - Remove word from blacklist
+`/addfilter <word> <reply>` - Set custom bot reply
+`/rmfilter <word>` - Remove custom filter
+`/setrules <text>` - Set group rules
+`/rules` - Show group rules
+
+**✨ Fun & Utils:**
+`/couple` - Couple of the day!
+`/afk [reason]` - Set AFK status
+`/anime [name]` - Search for an anime
+`/admin` - Bot Owner panel
+`/commands` - Show this list
+    """
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_rights(update, "warn"): return
+    target_id = await get_user_id(update, context)
+    if not target_id: return await update.message.reply_text("❌ Reply to a user to warn.")
+    if target_id in admins_db or await check_rights(update, "warn"): return await update.message.reply_text("❌ Cannot warn an Admin.")
+
+    chat_id = update.effective_chat.id
+    warnings_db[chat_id][target_id] += 1
+    count = warnings_db[chat_id][target_id]
+    
+    reason = " ".join(context.args) if context.args else "No reason given."
+    
+    if count >= 3:
+        await context.bot.restrict_chat_member(chat_id, target_id, permissions=ChatPermissions(can_send_messages=False))
+        warnings_db[chat_id][target_id] = 0
+        await update.message.reply_text(f"🛑 User {target_id} reached 3 warnings and is now MUTED!")
+    else:
+        await update.message.reply_text(f"⚠️ Warned {target_id}! ({count}/3)\nReason: {reason}")
+
+async def unwarn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_rights(update, "unwarn"): return
+    target_id = await get_user_id(update, context)
+    if not target_id: return await update.message.reply_text("❌ Reply to a user.")
+    
+    chat_id = update.effective_chat.id
+    if warnings_db[chat_id][target_id] > 0:
+        warnings_db[chat_id][target_id] -= 1
+        await update.message.reply_text(f"✅ Removed 1 warning from {target_id}. Current warns: {warnings_db[chat_id][target_id]}/3")
+    else:
+        await update.message.reply_text("✅ User has 0 warnings.")
+
+async def set_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_rights(update, "rules"): return
+    text = update.message.text.split(None, 1)
+    if len(text) < 2: return await update.message.reply_text("❌ Please provide rules text.")
+    rules_db[update.effective_chat.id] = text[1]
+    await update.message.reply_text("✅ Rules updated!")
+
+async def show_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    rules = rules_db.get(update.effective_chat.id, "No rules set yet.")
+    await update.message.reply_text(f"📜 **Group Rules:**\n\n{rules}", parse_mode="Markdown")
+
+async def add_blacklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_rights(update, "blacklist"): return
+    if not context.args: return await update.message.reply_text("❌ Provide a word.")
+    word = context.args[0].lower()
+    blacklist_db[update.effective_chat.id].add(word)
+    await update.message.reply_text(f"✅ Word '{word}' added to blacklist.")
+
+async def rm_blacklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_rights(update, "blacklist"): return
+    if not context.args: return await update.message.reply_text("❌ Provide a word.")
+    word = context.args[0].lower()
+    blacklist_db[update.effective_chat.id].discard(word)
+    await update.message.reply_text(f"✅ Word '{word}' removed from blacklist.")
+
+async def add_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_rights(update, "filter"): return
+    text = update.message.text.split(None, 2)
+    if len(text) < 3: return await update.message.reply_text("❌ Format: /addfilter <word> <reply>")
+    word, reply = text[1].lower(), text[2]
+    filters_db[update.effective_chat.id][word] = reply
+    await update.message.reply_text(f"✅ Filter added for '{word}'.")
+
+async def rm_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_rights(update, "filter"): return
+    if not context.args: return await update.message.reply_text("❌ Provide a word.")
+    word = context.args[0].lower()
+    filters_db[update.effective_chat.id].pop(word, None)
+    await update.message.reply_text(f"✅ Filter removed for '{word}'.")
+
+async def set_afk(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    reason = " ".join(context.args) if context.args else "No reason"
+    afk_db[update.effective_user.id] = {"reason": reason, "time": dt.now(), "name": _display_name(update.effective_user)}
+    await update.message.reply_text(f"💤 {_display_name(update.effective_user)} is now AFK. Reason: {reason}")
+
+async def get_anime(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args: return await update.message.reply_text("❌ Search naam toh batao! (e.g., /anime naruto)")
+    query = " ".join(context.args)
+    try:
+        async with httpx.AsyncClient() as client:
+            res = await client.get(f"https://api.jikan.moe/v4/anime?q={query}&limit=1")
+            data = res.json()
+            if data['data']:
+                anime = data['data'][0]
+                title = anime['title']
+                episodes = anime.get('episodes', 'N/A')
+                score = anime.get('score', 'N/A')
+                status = anime.get('status', 'N/A')
+                url = anime['url']
+                text = f"🎬 **{title}**\n\n📊 Score: {score}\n🎞 Episodes: {episodes}\n🔄 Status: {status}\n\n🔗 [More Info]({url})"
+                await update.message.reply_text(text, parse_mode="Markdown")
+            else:
+                await update.message.reply_text("❌ Anime not found!")
+    except Exception as e:
+        await update.message.reply_text("❌ API error.")
+
 # ------------- ADMIN PANEL (OWNER ONLY) -------------
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Only Owner
@@ -328,7 +476,7 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(
-        "Hey, I'm CINDRELLA 🌹—your group manager & AI bestie! Use /admin if you are my owner.",
+        "Hey, I'm CINDRELLA 🌹—your group manager & AI bestie!\nType /commands to see what I can do!",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -338,7 +486,11 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
         seen_members[chat_id][member.id] = {"name": _display_name(member), "is_bot": member.is_bot}
         if not member.is_bot:
             msg = random.choice(WELCOME_MESSAGES).format(name=_display_name(member))
-            await update.message.reply_text(msg)
+            # Send welcome image with caption
+            try:
+                await context.bot.send_animation(chat_id=chat_id, animation=WELCOME_IMAGE_URL, caption=msg)
+            except:
+                await update.message.reply_text(msg)
 
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
@@ -376,9 +528,8 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return await update.message.reply_text(reply[:4096])
         except Exception as e:
             logging.error(f"Error with model {model}: {e}")
-            continue # Try the next model if the current one fails
+            continue
 
-    # If all models fail
     await update.message.reply_text("Ugh, mera network thoda slow chal raha hai abhi. 🥺💔")
 
 async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -416,22 +567,24 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     register_sender(update)
     if not update.message or not update.message.text: return
 
-    # Owner Panel Input Handling
-    if update.effective_user.id == OWNER_ID:
+    user = update.effective_user
+    chat_id = update.effective_chat.id
+    msg_lower = update.message.text.lower()
+    
+    # 1. OWNER BROADCAST CHECK
+    if user.id == OWNER_ID:
         if context.user_data.pop("awaiting_broadcast", None):
             text = update.message.text
             for aid in admins_db:
                 try: await context.bot.send_message(aid, f"📢 Broadcast:\n{text}")
                 except: pass
             return await update.message.reply_text("✅ Broadcast sent.")
-
         if context.user_data.pop("awaiting_add_admin", None):
             try:
                 admins_db.add(int(update.message.text.strip()))
                 await update.message.reply_text("✅ Admin added.")
             except: await update.message.reply_text("❌ Invalid ID.")
             return
-
         if context.user_data.pop("awaiting_remove_admin", None):
             try:
                 uid = int(update.message.text.strip())
@@ -442,25 +595,65 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except: await update.message.reply_text("❌ Invalid ID.")
             return
 
-    # AI Chat
-    msg = update.message.text.lower()
+    # User is not admin -> apply filters
+    is_admin = await check_rights(update, "warn")
+
+    if not is_admin:
+        # 2. ANTI-SPAM
+        now = time.time()
+        user_times = spam_tracker[chat_id][user.id]
+        user_times.append(now)
+        user_times = [t for t in user_times if now - t < 5] # last 5 seconds
+        spam_tracker[chat_id][user.id] = user_times
+        
+        if len(user_times) > 5: # Limit: 5 msgs in 5 sec
+            try:
+                await update.message.delete()
+                await context.bot.restrict_chat_member(chat_id, user.id, permissions=ChatPermissions(can_send_messages=False))
+                await context.bot.send_message(chat_id, f"🚫 {_display_name(user)} muted for spamming.")
+            except: pass
+            return
+
+        # 3. BLACKLIST CHECK
+        for word in blacklist_db[chat_id]:
+            if word in msg_lower:
+                try:
+                    await update.message.delete()
+                    await context.bot.send_message(chat_id, f"🚫 Watch your language, {_display_name(user)}!")
+                except: pass
+                return
+
+    # 4. REMOVE AFK IF USER SENDS MESSAGE
+    if user.id in afk_db:
+        afk_db.pop(user.id)
+        await update.message.reply_text(f"👋 Welcome back {_display_name(user)}, AFK removed!")
+
+    # 5. CHECK IF MENTIONED USER IS AFK
+    if update.message.reply_to_message and update.message.reply_to_message.from_user.id in afk_db:
+        afk_user = afk_db[update.message.reply_to_message.from_user.id]
+        await update.message.reply_text(f"💤 {afk_user['name']} is currently AFK: {afk_user['reason']}")
+    elif update.message.entities:
+        for ent in update.message.entities:
+            if ent.type == "mention":
+                # Note: precise mapping requires DB, simplified check here
+                pass 
+
+    # 6. CUSTOM FILTERS CHECK
+    if msg_lower in filters_db[chat_id]:
+        return await update.message.reply_text(filters_db[chat_id][msg_lower])
+
+    # 7. AI CHAT
     bot_username = context.bot.username.lower() if context.bot.username else ""
-    
     greetings = ["hi","hello","hey","yo","sup","hii","heyy","heya","cindy","cindrella","gm","gn"]
     replies = ["Hey cutie 💖","hello sir 💕","Hey master 🌸","Yo! how’s your day? ☀️","Hii bestie"]
 
-    mentioned = update.message.entities and any(e.type == "mention" and bot_username in update.message.text.lower() for e in update.message.entities)
+    mentioned = update.message.entities and any(e.type == "mention" and bot_username in msg_lower for e in update.message.entities)
     replied = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
 
-    if msg in greetings and not mentioned and not replied:
+    if msg_lower in greetings and not mentioned and not replied:
         await update.message.reply_text(random.choice(replies))
     elif mentioned or replied:
         await ai_reply(update, context)
-
-async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    register_sender(update)
-    # Basic logging/forwarding logic can remain here if needed, simplified for cleaner code
-    pass
 
 # ------------- MAIN -------------
 def main():
@@ -470,15 +663,27 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("admin", admin_panel))
     application.add_handler(CallbackQueryHandler(admin_button_handler))
+    application.add_handler(CommandHandler("commands", commands_list))
 
-    # Moderation
+    # Moderation & Purge
     for cmd in ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote"]:
         application.add_handler(CommandHandler(cmd, partial(mod_action, action=cmd)))
 
-    # Purge
     application.add_handler(CommandHandler("purge", purge))
     application.add_handler(CommandHandler("purgeall", purge_all_user))
     application.add_handler(CommandHandler("purgegroup", purge_group))
+    
+    # Pro Features
+    application.add_handler(CommandHandler("warn", warn_user))
+    application.add_handler(CommandHandler("unwarn", unwarn_user))
+    application.add_handler(CommandHandler("setrules", set_rules))
+    application.add_handler(CommandHandler("rules", show_rules))
+    application.add_handler(CommandHandler("addblacklist", add_blacklist))
+    application.add_handler(CommandHandler("rmblacklist", rm_blacklist))
+    application.add_handler(CommandHandler("addfilter", add_filter))
+    application.add_handler(CommandHandler("rmfilter", rm_filter))
+    application.add_handler(CommandHandler("afk", set_afk))
+    application.add_handler(CommandHandler("anime", get_anime))
 
     # Fun
     application.add_handler(CommandHandler("couple", couple_command))
