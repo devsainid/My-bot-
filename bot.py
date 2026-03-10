@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Moderation + Purge + Permissions + Pro Features)
+# bot.py - CINDRELLA final (Moderation + Purge + Permissions + Pro Features + Welcome Card)
 import os
 import logging
 import json
@@ -7,6 +7,7 @@ import re
 import httpx
 import asyncio
 import time
+import urllib.parse
 from flask import Flask
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
@@ -61,7 +62,10 @@ WELCOME_MESSAGES = [
     "Welcome, {name}! Make yourself at home 💖"
 ]
 
+# Fallback welcome GIF
 WELCOME_IMAGE_URL = "https://i.pinimg.com/originals/7e/15/d4/7e15d482bb4bc0a8523a5e840a15865d.gif"
+# Background for Welcome Card
+WELCOME_BG_URL = "https://i.pinimg.com/originals/a0/bf/c5/a0bfc5df23c0b05b6e680ad5f1a5bbdc.jpg"
 
 # ---------- Helpers ----------
 def _display_name(user):
@@ -78,14 +82,12 @@ async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return update.message.reply_to_message.from_user.id
     if context.args:
         arg = context.args[0]
-        # Check if username
         if re.fullmatch(r"@\w{5,}", arg):
             try:
                 user = await context.bot.get_chat(arg)
                 return user.id
             except:
                 return None
-        # Check if ID
         try:
             return int(arg)
         except:
@@ -100,23 +102,18 @@ async def check_rights(update: Update, action: str) -> bool:
     user = update.effective_user
     chat = update.effective_chat
 
-    # 1. Global Bot Admin Bypass
     if user.id in admins_db:
         return True
 
-    # 2. Private Chat (Admin commands usually don't work here but prevent crash)
     if chat.type == "private":
         return False
 
-    # 3. Check Group Admin Rights
     try:
         member = await chat.get_member(user.id)
         
-        # Owner always has rights
         if isinstance(member, ChatMemberOwner):
             return True
 
-        # Admin specific checks
         if isinstance(member, ChatMemberAdministrator):
             if action in ["ban", "kick", "mute", "unban", "unmute", "warn", "unwarn"]:
                 return member.can_restrict_members
@@ -127,7 +124,7 @@ async def check_rights(update: Update, action: str) -> bool:
             if action in ["promote", "demote"]:
                 return member.can_promote_members
         
-        return False # Regular member
+        return False
     except Exception as e:
         logging.error(f"Permission check error: {e}")
         return False
@@ -136,21 +133,17 @@ async def check_rights(update: Update, action: str) -> bool:
 async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     
-    # Extract action dynamically from the command triggered (/ban -> ban)
     action = update.message.text.split()[0][1:].split('@')[0].lower()
     
-    # 1. Check Permissions
     if not await check_rights(update, action):
         return await update.message.reply_text("❌ You don't have Admin rights to do this.")
 
-    # 2. Get Target User
     target_id = await get_user_id(update, context)
     if not target_id and action not in ["unpin"]:
         return await update.message.reply_text("❌ Reply to a user or provide an ID/Username.")
 
     chat_id = update.effective_chat.id
 
-    # 3. Execute Action
     try:
         if action == "ban":
             await context.bot.ban_chat_member(chat_id, target_id)
@@ -169,7 +162,6 @@ async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             await update.message.reply_text(f"🔇 Muted {target_id}.")
         elif action == "unmute":
-            # FIXED: Updated ChatPermissions to match latest Telegram API
             await context.bot.restrict_chat_member(
                 chat_id, target_id,
                 permissions=ChatPermissions(
@@ -267,7 +259,6 @@ async def purge_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Messages too old/already deleted.")
 
 # ------------- PRO FEATURES -------------
-
 async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = """
 🌹 **CINDRELLA COMMANDS** 🌹
@@ -316,7 +307,6 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     chat_id = update.effective_chat.id
 
-    # FIXED: Check if the TARGET user is an admin before warning
     try:
         target_member = await context.bot.get_chat_member(chat_id, target_id)
         if target_id in admins_db or target_member.status in ['administrator', 'creator']:
@@ -466,7 +456,7 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         info = [str(aid) for aid in admins_db]
         await query.message.reply_text("Current Bot Admins IDs:\n" + "\n".join(info))
 
-# ------------- COUPLE & AI -------------
+# ------------- COUPLE & AI & WELCOME -------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(
@@ -476,12 +466,44 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    chat = update.effective_chat
+    
+    try:
+        member_count = await chat.get_member_count()
+    except:
+        member_count = "New"
+
     for member in update.message.new_chat_members:
         seen_members[chat_id][member.id] = {"name": _display_name(member), "is_bot": member.is_bot}
         if not member.is_bot:
             msg = random.choice(WELCOME_MESSAGES).format(name=_display_name(member))
-            try: await context.bot.send_animation(chat_id=chat_id, animation=WELCOME_IMAGE_URL, caption=msg)
-            except: await update.message.reply_text(msg)
+            
+            # 🌟 DYNAMIC WELCOME CARD GENERATION 🌟
+            try:
+                photos = await context.bot.get_user_profile_photos(member.id, limit=1)
+                avatar_url = "https://i.ibb.co/4pDNDk1/avatar.png" # Default DP if user has none
+                
+                if photos.total_count > 0:
+                    file_id = photos.photos[0][-1].file_id
+                    file_info = await context.bot.get_file(file_id)
+                    avatar_url = file_info.file_path
+                
+                # Encoding data for URL
+                safe_name = urllib.parse.quote(_display_name(member))
+                safe_chat = urllib.parse.quote(chat.title or "Our Group")
+                safe_avatar = urllib.parse.quote(avatar_url)
+                safe_bg = urllib.parse.quote(WELCOME_BG_URL)
+                
+                # Popcat API for Welcome Image
+                card_url = f"https://api.popcat.xyz/welcomecard?background={safe_bg}&text1={safe_name}&text2=Welcome+to+{safe_chat}&text3=Member+{member_count}&avatar={safe_avatar}"
+                
+                await context.bot.send_photo(chat_id=chat_id, photo=card_url, caption=msg)
+            
+            except Exception as e:
+                logging.error(f"Welcome Card Error: {e}")
+                # 🛑 Fallback to default GIF if API fails
+                try: await context.bot.send_animation(chat_id=chat_id, animation=WELCOME_IMAGE_URL, caption=msg)
+                except: await update.message.reply_text(msg)
 
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
