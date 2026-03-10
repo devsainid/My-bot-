@@ -196,6 +196,21 @@ async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE, action:
                 await context.bot.unpin_chat_message(chat_id)
             await update.message.reply_text("✅ Unpinned.")
 
+        # --- PROMOTE ---
+        elif action == "promote":
+            await context.bot.promote_chat_member(
+                chat_id, target_id,
+                can_manage_chat=True,
+                can_delete_messages=True,
+                can_manage_video_chats=True,
+                can_restrict_members=True,
+                can_promote_members=False, # Safe default: newly promoted admin can't promote others
+                can_change_info=True,
+                can_invite_users=True,
+                can_pin_messages=True
+            )
+            await update.message.reply_text(f"🌟 Promoted {target_id} to Admin.")
+
     except BadRequest as e:
         await update.message.reply_text(f"❌ Error: {e.message}")
     except Exception as e:
@@ -309,7 +324,7 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         info = [str(aid) for aid in admins_db]
         await query.message.reply_text("Current Bot Admins IDs:\n" + "\n".join(info))
 
-# ------------- COUPLE & AI (UNCHANGED) -------------
+# ------------- COUPLE & AI -------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(
@@ -333,22 +348,38 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         usage_count["count"] = 0
 
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
-    system_prompt = "You are CINDRELLA — a bold, sassy, flirty, and smart Gen-Z girl persona. Reply shortly (1-2 lines)."
+    system_prompt = "You are CINDRELLA, a bold, sassy, flirty, and smart Gen-Z girl. You are a Telegram group manager. Always reply in Hinglish or English. Keep your replies very short (1-2 lines), engaging, and playful. Never act like an AI, never break character."
 
-    # Using Mistral for reliability
-    try:
-        payload = {
-            "model": "mistralai/mistral-7b-instruct",
-            "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": message_text}]
-        }
-        async with httpx.AsyncClient(timeout=20) as client:
-            res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
-            if res.status_code == 200:
-                reply = res.json()["choices"][0]["message"]["content"]
-                usage_count["count"] += 1
-                return await update.message.reply_text(reply[:4096])
-    except:
-        pass
+    # List of models ordered by preference
+    models = [
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemma-3-27b-it:free",
+        "nvidia/nemotron-3-nano-30b-a3b:free",
+        "stepfun/step-3.5-flash:free",
+        "arcee-ai/trinity-large-preview:free",
+        "meta-llama/llama-3.2-3b-instruct:free",
+        "arcee-ai/trinity-mini:free",
+        "liquid/lfm-2.5-1.2b-thinking:free"
+    ]
+
+    for model in models:
+        try:
+            payload = {
+                "model": model,
+                "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": message_text}]
+            }
+            async with httpx.AsyncClient(timeout=20) as client:
+                res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+                if res.status_code == 200:
+                    reply = res.json()["choices"][0]["message"]["content"]
+                    usage_count["count"] += 1
+                    return await update.message.reply_text(reply[:4096])
+        except Exception as e:
+            logging.error(f"Error with model {model}: {e}")
+            continue # Try the next model if the current one fails
+
+    # If all models fail
+    await update.message.reply_text("Ugh, mera network thoda slow chal raha hai abhi. 🥺💔")
 
 async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -441,7 +472,7 @@ def main():
     application.add_handler(CallbackQueryHandler(admin_button_handler))
 
     # Moderation
-    for cmd in ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin"]:
+    for cmd in ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote"]:
         application.add_handler(CommandHandler(cmd, partial(mod_action, action=cmd)))
 
     # Purge
