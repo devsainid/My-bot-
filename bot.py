@@ -169,11 +169,20 @@ async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             await update.message.reply_text(f"🔇 Muted {target_id}.")
         elif action == "unmute":
+            # FIXED: Updated ChatPermissions to match latest Telegram API
             await context.bot.restrict_chat_member(
                 chat_id, target_id,
                 permissions=ChatPermissions(
-                    can_send_messages=True, can_send_media_messages=True,
-                    can_send_other_messages=True, can_add_web_page_previews=True
+                    can_send_messages=True, 
+                    can_send_audios=True,
+                    can_send_documents=True,
+                    can_send_photos=True,
+                    can_send_videos=True,
+                    can_send_video_notes=True,
+                    can_send_voice_notes=True,
+                    can_send_polls=True,
+                    can_send_other_messages=True, 
+                    can_add_web_page_previews=True
                 )
             )
             await update.message.reply_text(f"🔊 Unmuted {target_id}.")
@@ -304,10 +313,17 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     target_id = await get_user_id(update, context)
     if not target_id: return await update.message.reply_text("❌ Reply to a user to warn.")
-    if target_id in admins_db or await check_rights(update, "warn"): 
-        return await update.message.reply_text("❌ Cannot warn an Admin.")
-
+    
     chat_id = update.effective_chat.id
+
+    # FIXED: Check if the TARGET user is an admin before warning
+    try:
+        target_member = await context.bot.get_chat_member(chat_id, target_id)
+        if target_id in admins_db or target_member.status in ['administrator', 'creator']:
+            return await update.message.reply_text("❌ Cannot warn an Admin.")
+    except Exception:
+        pass
+
     warnings_db[chat_id][target_id] += 1
     count = warnings_db[chat_id][target_id]
     
@@ -624,7 +640,6 @@ def main():
     application.add_handler(CallbackQueryHandler(admin_button_handler))
     application.add_handler(CommandHandler("commands", commands_list))
 
-    # FIX: Grouped moderation commands directly to avoid partial() breaking PTB loops
     mod_cmds = ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote"]
     application.add_handler(CommandHandler(mod_cmds, mod_action))
 
