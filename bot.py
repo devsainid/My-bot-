@@ -478,30 +478,26 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if not member.is_bot:
             msg = random.choice(WELCOME_MESSAGES).format(name=_display_name(member))
             
-            # 🌟 DYNAMIC WELCOME CARD GENERATION 🌟
             try:
                 photos = await context.bot.get_user_profile_photos(member.id, limit=1)
-                avatar_url = "https://i.ibb.co/4pDNDk1/avatar.png" # Default DP if user has none
+                avatar_url = "https://i.ibb.co/4pDNDk1/avatar.png" 
                 
                 if photos.total_count > 0:
                     file_id = photos.photos[0][-1].file_id
                     file_info = await context.bot.get_file(file_id)
                     avatar_url = file_info.file_path
                 
-                # Encoding data for URL
                 safe_name = urllib.parse.quote(_display_name(member))
                 safe_chat = urllib.parse.quote(chat.title or "Our Group")
                 safe_avatar = urllib.parse.quote(avatar_url)
                 safe_bg = urllib.parse.quote(WELCOME_BG_URL)
                 
-                # Popcat API for Welcome Image
                 card_url = f"https://api.popcat.xyz/welcomecard?background={safe_bg}&text1={safe_name}&text2=Welcome+to+{safe_chat}&text3=Member+{member_count}&avatar={safe_avatar}"
                 
                 await context.bot.send_photo(chat_id=chat_id, photo=card_url, caption=msg)
             
             except Exception as e:
                 logging.error(f"Welcome Card Error: {e}")
-                # 🛑 Fallback to default GIF if API fails
                 try: await context.bot.send_animation(chat_id=chat_id, animation=WELCOME_IMAGE_URL, caption=msg)
                 except: await update.message.reply_text(msg)
 
@@ -537,12 +533,19 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if res.status_code == 200:
                     reply = res.json()["choices"][0]["message"]["content"]
                     usage_count["count"] += 1
-                    return await update.message.reply_text(reply[:4096])
+                    # ERROR FIX: Handling BadRequest if original message is deleted
+                    try:
+                        return await update.message.reply_text(reply[:4096])
+                    except BadRequest:
+                        return await context.bot.send_message(chat_id=update.effective_chat.id, text=reply[:4096])
         except Exception as e:
             logging.error(f"Error with model {model}: {e}")
             continue
 
-    await update.message.reply_text("Ugh, mera network thoda slow chal raha hai abhi. 🥺💔")
+    try:
+        await update.message.reply_text("Ugh, mera network thoda slow chal raha hai abhi. 🥺💔")
+    except BadRequest:
+        pass
 
 async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
