@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Solo Leveling RPG + Admin Groups + Bug Fixes)
+# bot.py - CINDRELLA final (Solo Leveling RPG + Admin Groups + Stats Reply + Give EXP)
 import os
 import logging
 import json
@@ -143,13 +143,25 @@ def get_hunter_stats(exp, user_id=None):
 
 async def hunter_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
-    user = update.effective_user
-    data = hunter_db[user.id]
-    level, rank = get_hunter_stats(data["exp"], user.id)
+    
+    # Check if replying to someone to see their stats
+    target_user = update.effective_user
+    if update.message.reply_to_message:
+        target_user = update.message.reply_to_message.from_user
+    
+    # Ensure target is in database
+    username = f"@{target_user.username}" if target_user.username else ""
+    if target_user.id not in hunter_db:
+        hunter_db[target_user.id] = {"name": _display_name(target_user), "username": username, "exp": 0, "last_hunt": 0, "last_daily": ""}
+    
+    if target_user.id == OWNER_ID:
+        hunter_db[target_user.id]["exp"] = 9999999
+
+    data = hunter_db[target_user.id]
+    level, rank = get_hunter_stats(data["exp"], target_user.id)
     uname_display = f" ({data['username']})" if data['username'] else ""
     safe_name = str(data['name']).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     
-    # HTML Parse mode applied to prevent crash
     text = f"🪪 <b>HUNTER LICENSE</b>\n\n👤 <b>Name:</b> {safe_name}{uname_display}\n🎖 <b>Rank:</b> {rank}\n📊 <b>Level:</b> {level}\n⚡ <b>EXP:</b> {data['exp'] if level != 'MAX' else '∞'}"
     await update.message.reply_text(text, parse_mode="HTML")
 
@@ -199,6 +211,46 @@ async def daily_quest(update: Update, context: ContextTypes.DEFAULT_TYPE):
     level, rank = get_hunter_stats(data["exp"], user.id)
     await update.message.reply_text(f"🏋️‍♂️ **Daily Quest Completed!**\n100 Pushups, 100 Situps, 10km Run!\n\n🌟 +150 EXP Gained!\n📊 Current Level: {level}")
 
+async def give_exp(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ensure_user_registered(update)
+    sender = update.effective_user
+    
+    if not update.message.reply_to_message:
+        return await update.message.reply_text("❌ Jisko EXP dena hai, uske message ka reply karke `/give <amount>` likho.")
+        
+    target = update.message.reply_to_message.from_user
+    
+    if sender.id == target.id:
+        return await update.message.reply_text("❌ Khud ko EXP nahi de sakte!")
+        
+    if not context.args or not context.args[0].isdigit():
+        return await update.message.reply_text("❌ Sahi format: `/give <amount>`")
+        
+    amount = int(context.args[0])
+    if amount <= 0:
+        return await update.message.reply_text("❌ Amount 0 se zyada hona chahiye.")
+        
+    # Ensure target is in DB
+    if target.id not in hunter_db:
+        username = f"@{target.username}" if target.username else ""
+        hunter_db[target.id] = {"name": _display_name(target), "username": username, "exp": 0, "last_hunt": 0, "last_daily": ""}
+        
+    sender_data = hunter_db[sender.id]
+    target_data = hunter_db[target.id]
+    
+    # Owner verification check (Infinite EXP transfer)
+    if sender.id != OWNER_ID:
+        if sender_data["exp"] < amount:
+            return await update.message.reply_text(f"❌ Tumhare paas itni EXP nahi hai! (Current: {sender_data['exp']})")
+        sender_data["exp"] -= amount
+        
+    target_data["exp"] += amount
+    
+    safe_sender = str(sender_data['name']).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    safe_target = str(target_data['name']).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    
+    await update.message.reply_text(f"💸 <b>EXP Transferred!</b>\n\n<b>{safe_sender}</b> gave <b>{amount} EXP</b> to <b>{safe_target}</b> ⚡", parse_mode="HTML")
+
 async def top_hunter_local(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     chat_id = update.effective_chat.id
@@ -212,7 +264,6 @@ async def top_hunter_local(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not sorted_hunters:
         return await update.message.reply_text("No active hunters in this guild.")
         
-    # HTML Parse mode applied to fix crash issue
     text = "🏆 <b>TOP 10 GUILD HUNTERS</b> 🏆\n\n"
     for i, uid in enumerate(sorted_hunters, 1):
         h = hunter_db[uid]
@@ -233,7 +284,6 @@ async def world_top_global(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not sorted_hunters:
         return await update.message.reply_text("The world is empty. No hunters found.")
         
-    # HTML Parse mode applied to fix crash issue
     text = "🌍 <b>WORLD TOP 10 S-RANK HUNTERS</b> 🌍\n\n"
     for i, h in enumerate(sorted_hunters, 1):
         uid = next((k for k, v in hunter_db.items() if v == h), None)
@@ -346,9 +396,10 @@ async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🌹 **CINDRELLA COMMANDS** 🌹
 
 **⚔️ Solo Leveling (RPG):**
-`/stats` - Check Hunter License & Rank
+`/stats [reply]` - Check Hunter License (Yours or replied)
 `/hunt` - Enter Dungeon & Kill Monsters
 `/daily` - Daily System Quest (+150 EXP)
+`/give <reply> <amount>` - Donate EXP to another hunter
 `/top_hunter` - Top 10 Hunters in Group
 `/world_top` - Global Top 10 S-Rank Hunters
 
@@ -665,6 +716,7 @@ def main():
     application.add_handler(CommandHandler("stats", hunter_profile))
     application.add_handler(CommandHandler("hunt", hunt))
     application.add_handler(CommandHandler("daily", daily_quest))
+    application.add_handler(CommandHandler("give", give_exp)) # NEW GIVE COMMAND
     application.add_handler(CommandHandler("top_hunter", top_hunter_local))
     application.add_handler(CommandHandler("world_top", world_top_global))
 
