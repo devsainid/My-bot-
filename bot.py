@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Solo Leveling RPG + Admin Groups + OP Mode Fixed)
+# bot.py - CINDRELLA final (Solo Leveling RPG + Admin Groups + Bug Fixes)
 import os
 import logging
 import json
@@ -147,9 +147,11 @@ async def hunter_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = hunter_db[user.id]
     level, rank = get_hunter_stats(data["exp"], user.id)
     uname_display = f" ({data['username']})" if data['username'] else ""
+    safe_name = str(data['name']).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     
-    text = f"🪪 **HUNTER LICENSE**\n\n👤 **Name:** {data['name']}{uname_display}\n🎖 **Rank:** {rank}\n📊 **Level:** {level}\n⚡ **EXP:** {data['exp'] if level != 'MAX' else '∞'}"
-    await update.message.reply_text(text, parse_mode="Markdown")
+    # HTML Parse mode applied to prevent crash
+    text = f"🪪 <b>HUNTER LICENSE</b>\n\n👤 <b>Name:</b> {safe_name}{uname_display}\n🎖 <b>Rank:</b> {rank}\n📊 <b>Level:</b> {level}\n⚡ <b>EXP:</b> {data['exp'] if level != 'MAX' else '∞'}"
+    await update.message.reply_text(text, parse_mode="HTML")
 
 async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
@@ -157,7 +159,6 @@ async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     now = time.time()
     data = hunter_db[user.id]
     
-    # 1 Hour Cooldown for everyone (including owner to prevent spam)
     if now - data["last_hunt"] < 3600: 
         wait = int(3600 - (now - data["last_hunt"]))
         m, s = divmod(wait, 60)
@@ -185,7 +186,6 @@ async def daily_quest(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     user = update.effective_user
     
-    # Reset at 1:00 AM IST
     now_ist = dt.now(ZoneInfo("Asia/Kolkata"))
     reset_day = str(now_ist.date() if now_ist.hour >= 1 else (now_ist - timedelta(days=1)).date())
     
@@ -212,13 +212,20 @@ async def top_hunter_local(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not sorted_hunters:
         return await update.message.reply_text("No active hunters in this guild.")
         
-    text = "🏆 **TOP 10 GUILD HUNTERS** 🏆\n\n"
+    # HTML Parse mode applied to fix crash issue
+    text = "🏆 <b>TOP 10 GUILD HUNTERS</b> 🏆\n\n"
     for i, uid in enumerate(sorted_hunters, 1):
         h = hunter_db[uid]
         level, rank = get_hunter_stats(h["exp"], uid)
         uname = f" {h.get('username', '')}" if h.get("username") else ""
-        text += f"**{i}.** {h['name']}{uname} - Lvl {level} ({rank})\n"
-    await update.message.reply_text(text, parse_mode="Markdown")
+        safe_name = str(h['name']).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        text += f"<b>{i}.</b> {safe_name}{uname} - Lvl {level} ({rank})\n"
+        
+    try:
+        await update.message.reply_text(text, parse_mode="HTML")
+    except Exception as e:
+        logging.error(f"Top Hunter Error: {e}")
+        await update.message.reply_text("System Error loading hunter list.")
 
 async def world_top_global(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
@@ -226,13 +233,20 @@ async def world_top_global(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not sorted_hunters:
         return await update.message.reply_text("The world is empty. No hunters found.")
         
-    text = "🌍 **WORLD TOP 10 S-RANK HUNTERS** 🌍\n\n"
+    # HTML Parse mode applied to fix crash issue
+    text = "🌍 <b>WORLD TOP 10 S-RANK HUNTERS</b> 🌍\n\n"
     for i, h in enumerate(sorted_hunters, 1):
         uid = next((k for k, v in hunter_db.items() if v == h), None)
         level, rank = get_hunter_stats(h["exp"], uid)
         uname = f" {h.get('username', '')}" if h.get("username") else ""
-        text += f"**{i}.** {h['name']}{uname} - Lvl {level} ({rank})\n"
-    await update.message.reply_text(text, parse_mode="Markdown")
+        safe_name = str(h['name']).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        text += f"<b>{i}.</b> {safe_name}{uname} - Lvl {level} ({rank})\n"
+        
+    try:
+        await update.message.reply_text(text, parse_mode="HTML")
+    except Exception as e:
+        logging.error(f"World Top Error: {e}")
+        await update.message.reply_text("System Error loading world list.")
 
 # ------------- MODERATION COMMANDS -------------
 async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -491,15 +505,17 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     elif query.data == "list_groups":
         if not known_groups: return await query.message.reply_text("Bot is not active in any groups yet.")
         await query.message.reply_text("Fetching group links... please wait. ⏳")
-        text = "🌐 **Bot Groups & Links:**\n\n"
+        text = "🌐 <b>Bot Groups & Links:</b>\n\n"
         for cid, title in list(known_groups.items()):
+            safe_title = str(title).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             try:
                 link = await context.bot.export_chat_invite_link(cid)
-                text += f"🔹 {title}: [Invite Link]({link})\n"
+                text += f"🔹 {safe_title}: <a href='{link}'>Invite Link</a>\n"
             except:
-                text += f"🔹 {title}: *(No Admin Rights)*\n"
+                text += f"🔹 {safe_title}: <i>(No Admin Rights)</i>\n"
+        
         for i in range(0, len(text), 4000):
-            await query.message.reply_text(text[i:i+4000], parse_mode="Markdown", disable_web_page_preview=True)
+            await query.message.reply_text(text[i:i+4000], parse_mode="HTML", disable_web_page_preview=True)
     elif query.data == "add_admin":
         await query.message.reply_text("Send user ID to add as Bot Admin:")
         context.user_data["awaiting_add_admin"] = True
@@ -581,12 +597,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     msg_lower = update.message.text.lower()
     
-    # 🌍 RPG & Tracking Updates properly handled through ensure_user_registered
     ensure_user_registered(update)
     
     if user.id != OWNER_ID: hunter_db[user.id]["exp"] += 1 
 
-    # Owner commands processing
     if user.id == OWNER_ID:
         if context.user_data.pop("awaiting_broadcast", None):
             for aid in admins_db:
@@ -603,7 +617,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except: await update.message.reply_text("❌ Invalid ID.")
             return
 
-    # Spam & Filter Checks
     if not await check_rights(update, "warn"):
         now = time.time()
         spam_tracker[chat_id][user.id] = [t for t in spam_tracker[chat_id][user.id] + [now] if now - t < 5]
@@ -620,7 +633,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return await context.bot.send_message(chat_id, f"🚫 Watch your language, {_display_name(user)}!")
             except: pass
 
-    # AFK Logic
     if user.id in afk_db:
         afk_db.pop(user.id)
         await update.message.reply_text(f"👋 Welcome back {_display_name(user)}, AFK removed!")
@@ -628,10 +640,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         afk_user = afk_db[update.message.reply_to_message.from_user.id]
         await update.message.reply_text(f"💤 {afk_user['name']} is currently AFK: {afk_user['reason']}")
 
-    # Custom Filters
     if msg_lower in filters_db[chat_id]: return await update.message.reply_text(filters_db[chat_id][msg_lower])
 
-    # AI Trigger Logic
     bot_un = context.bot.username.lower() if context.bot.username else ""
     mentioned = (update.message.entities and any(e.type == "mention" and bot_un in msg_lower for e in update.message.entities)) or any(f in msg_lower for f in filters_db[chat_id].keys())
     replied = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
@@ -652,7 +662,6 @@ def main():
     application.add_handler(CallbackQueryHandler(admin_button_handler))
     application.add_handler(CommandHandler("commands", commands_list))
 
-    # SOLO LEVELING COMMANDS
     application.add_handler(CommandHandler("stats", hunter_profile))
     application.add_handler(CommandHandler("hunt", hunt))
     application.add_handler(CommandHandler("daily", daily_quest))
