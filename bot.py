@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (No Purgeall + DB Couple Fix + Pro Admin Panel + RANDOM DUNGEONS)
+# bot.py - CINDRELLA final (Supreme AI + Premium Random Dungeons + Safe Core)
 import os
 import logging
 import json
@@ -55,7 +55,7 @@ known_groups = {}
 chat_members_db = defaultdict(set) 
 hunter_db = {} 
 
-# --- NEW: DUNGEON SYSTEM STATE ---
+# --- DUNGEON SYSTEM STATE ---
 group_msg_counts = defaultdict(int)
 active_dungeons = {}
 
@@ -64,7 +64,7 @@ DUNGEON_RANKS = {
     "D": {"video": "https://files.catbox.moe/ne4vk6.mp4", "reward": 80, "penalty": 20, "hp": 200, "name": "Direwolf Den"},
     "C": {"video": "https://files.catbox.moe/nyvaoy.mp4", "reward": 150, "penalty": 40, "hp": 400, "name": "High Orc Lair"},
     "B": {"video": "https://files.catbox.moe/nyvaoy.mp4", "reward": 250, "penalty": 60, "hp": 600, "name": "Assassin Guild"},
-    "A": {"video": "https://files.catbox.moe/k5doyt.mp4", "reward": 400, "penalty": 100, "hp": 1000, "name": "A/B-Class Boss Room"},
+    "A": {"video": "https://files.catbox.moe/k5doyt.mp4", "reward": 400, "penalty": 100, "hp": 1000, "name": "A-Class Boss Room"},
     "S": {"video": "https://files.catbox.moe/k5doyt.mp4", "reward": 800, "penalty": 200, "hp": 2000, "name": "Ant King Nest"},
     "RED": {"video": "https://files.catbox.moe/8dxlw3.mp4", "reward": 1500, "penalty": 400, "hp": 3000, "name": "Blood-Red Igris"}
 }
@@ -477,7 +477,7 @@ async def get_anime(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else: await update.message.reply_text("❌ Anime not found!")
     except: await update.message.reply_text("❌ API error.")
 
-# ------------- ADMIN PANEL (OWNER vs ADMIN) -------------
+# ------------- ADMIN PANEL -------------
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in admins_db: 
@@ -539,10 +539,10 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     admin_text += f"🔹 Unknown Hunter (`{aid}`)\n"
         await query.message.reply_text(admin_text, parse_mode="Markdown")
 
-# ------------- AI & WELCOME & CORE TEXT HANDLER -------------
+# ------------- AI & WELCOME -------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
-    await update.message.reply_text("Hey, I'm CINDRELLA 🌹—your group manager & AI bestie!\nType /commands to see what I can do!", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text("Hey, I'm CINDRELLA 🌹—your Supreme System AI & Guild Manager!\nType /commands to see what I can do!", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id, chat = update.effective_chat.id, update.effective_chat
@@ -568,7 +568,10 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
-    system_prompt = "You are CINDRELLA, a bold, sassy, flirty, and smart Gen-Z girl. You are a Telegram group manager. Always reply in Hinglish or English. Keep your replies very short (1-2 lines), engaging, and playful. Never act like an AI."
+    
+    # NEW SUPREME AI PROMPT
+    system_prompt = "You are CINDRELLA, the Supreme System AI and Guild Manager of a National Level Hunter Guild. You are highly intelligent, slightly arrogant but deeply caring about your hunters, witty, and extremely loyal to the Guild Master. You talk like a high-end, powerful AI mixed with an anime boss lady. You use words related to gaming, leveling up, quests, and stats. Always reply in Hinglish or English. Keep replies short (1-2 lines), engaging, and badass. Never break character."
+    
     models = ["meta-llama/llama-3.3-70b-instruct:free", "google/gemma-3-27b-it:free", "nvidia/nemotron-3-nano-30b-a3b:free", "stepfun/step-3.5-flash:free", "arcee-ai/trinity-large-preview:free"]
     
     for model in models:
@@ -582,7 +585,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     try: return await update.message.reply_text(reply[:4096])
                     except BadRequest: return await context.bot.send_message(chat_id=update.effective_chat.id, text=reply[:4096])
         except: continue
-    try: await update.message.reply_text("Ugh, mera network thoda slow chal raha hai abhi. 🥺💔")
+    try: await update.message.reply_text("System processing error. Try again later, Hunter.")
     except: pass
 
 async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -602,7 +605,7 @@ async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def couple_daily_reset(context: ContextTypes.DEFAULT_TYPE): couples_db.clear()
 
-# ------------- NEW: RANDOM DUNGEON SYSTEM -------------
+# ------------- PREMIUM RANDOM DUNGEON SYSTEM -------------
 async def gate_break(context: ContextTypes.DEFAULT_TYPE):
     chat_id = context.job.data
     if chat_id in active_dungeons:
@@ -614,16 +617,22 @@ async def gate_break(context: ContextTypes.DEFAULT_TYPE):
                 hunter_db[uid]["exp"] = max(0, hunter_db[uid]["exp"] - penalty)
                 save_hunter(uid)
                 affected += 1
+                
+        break_caption = f"""💀 <b>[ SYSTEM WARNING ]</b> 💀
+<i>Hunters failed to clear the dungeon in time...</i>
+
+💠 <b>STATUS:</b> ⚫ <b>GATE BREAK (FAILED)</b>
+⛩️ <b>GATE RANK:</b> <code> {dungeon['rank']}-Rank </code>
+👹 <b>BOSS NAME:</b> <code> {DUNGEON_RANKS[dungeon['rank']]['name']} (ESCAPED) </code>
+
+🩸 <b>GUILD CASUALTIES:</b>
+<i>The Boss escaped the gate and attacked the Guild members!</i>
+📉 <b>Penalty:</b> <i>{affected} active Hunters lost {penalty} EXP.</i>"""
         
         try:
-            await context.bot.delete_message(chat_id, dungeon["msg_id"])
+            # Video delete nahi hogi, bas caption update aur keyboard delete!
+            await context.bot.edit_message_caption(chat_id=chat_id, message_id=dungeon["msg_id"], caption=break_caption, parse_mode="HTML")
         except: pass
-        
-        await context.bot.send_message(
-            chat_id,
-            f"💀 <b>GATE BREAK!!</b> 💀\n\nThe {dungeon['rank']}-Rank Boss escaped the dungeon and ravaged the Guild!\n📉 {affected} active Hunters lost {penalty} EXP!",
-            parse_mode="HTML"
-        )
 
 async def clear_dungeon(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, participants: list):
     dungeon = active_dungeons.pop(chat_id, None)
@@ -637,23 +646,33 @@ async def clear_dungeon(update: Update, context: ContextTypes.DEFAULT_TYPE, chat
         if uid in hunter_db and uid != OWNER_ID:
             hunter_db[uid]["exp"] += reward
             save_hunter(uid)
-            winners_text += f"- {hunter_db[uid]['name']} (+{reward} EXP)\n"
+            # USERNAMES FIX FOR HEROES LIST
+            uname = hunter_db[uid].get('username', '')
+            display_uname = uname if uname else hunter_db[uid]['name']
+            winners_text += f"🗡️ {display_uname} <code> (+{reward} EXP) </code>\n"
             
-    try: await context.bot.delete_message(chat_id, dungeon["msg_id"])
+    clear_caption = f"""✅ <b>[ SYSTEM NOTIFICATION ]</b> ✅
+<i>The Gate has been successfully secured!</i>
+
+💠 <b>STATUS:</b> 🔴 <b>CLOSED (CLEARED)</b>
+⛩️ <b>GATE RANK:</b> <code> {dungeon['rank']}-Rank </code>
+👹 <b>BOSS NAME:</b> <code> {DUNGEON_RANKS[dungeon['rank']]['name']} (DEFEATED) </code>
+
+🏆 <b>HEROES OF THE RAID:</b>
+{winners_text}
+<i>The dungeon is now sealed. Excellent work, Hunters!</i>"""
+            
+    try:
+        # Video wahi rahegi, caption update ho jayega!
+        await context.bot.edit_message_caption(chat_id=chat_id, message_id=dungeon["msg_id"], caption=clear_caption, parse_mode="HTML")
     except: pass
-    
-    await context.bot.send_message(
-        chat_id,
-        f"🎊 <b>DUNGEON CLEARED!</b> 🎊\n\nThe {dungeon['rank']}-Rank Gate has been successfully closed!\n\n🏅 <b>Rewards Distributed:</b>\n{winners_text}",
-        parse_mode="HTML"
-    )
 
 async def spawn_dungeon(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int):
     ranks = ["E", "E", "D", "D", "C", "C", "B", "A", "S", "RED"]
     rank = random.choice(ranks)
     data = DUNGEON_RANKS[rank]
     
-    dtype = random.choice([1, 2, 3]) # 1: Boss Smash, 2: Word Type, 3: Co-op Raid
+    dtype = random.choice([1, 2, 3])
     
     dungeon_info = {
         "rank": rank, "penalty": data["penalty"], "reward": data["reward"], 
@@ -674,15 +693,19 @@ async def spawn_dungeon(update: Update, context: ContextTypes.DEFAULT_TYPE, chat
         instructions = "Heavy Boss! We need 3 different Hunters to click JOIN RAID!"
         markup = InlineKeyboardMarkup([[InlineKeyboardButton("🛡️ JOIN RAID (0/3)", callback_data="dungeon_join")]])
 
-    caption = f"""🚨 <b>SYSTEM ALERT: A GATE HAS APPEARED!</b> 🚨
+    caption = f"""⚠️ <b>[ SYSTEM NOTIFICATION ]</b> ⚠️
+<i>A dimensional rift has opened in the Guild!</i>
 
-⛩️ <b>Rank:</b> {rank}-Rank Dungeon
-👹 <b>Boss:</b> {data['name']}
+💠 <b>STATUS:</b> 🟢 <b>OPEN</b>
+⛩️ <b>GATE RANK:</b> <code> {rank}-Rank </code>
+👹 <b>BOSS NAME:</b> <code> {data['name']} </code>
+🩸 <b>BOSS HP:</b> <code> {data['hp']} </code>
 
-⚔️ <b>HOW TO CLEAR:</b>
-{instructions}
+📜 <b>MISSION LOG:</b>
+<i>{instructions}</i>
 
-⏳ <i>Time limit: 5 Minutes before GATE BREAK!</i>"""
+⏳ <b>TIME REMAINING:</b> <code> 05:00 Minutes </code>
+🎁 <b>CLEAR REWARD:</b> <code> +{data['reward']} EXP </code>"""
 
     try:
         msg = await context.bot.send_video(
@@ -734,21 +757,21 @@ async def dungeon_button_handler(update: Update, context: ContextTypes.DEFAULT_T
                 await query.edit_message_reply_markup(reply_markup=markup)
             except: pass
 
-# ------------- CORE TEXT HANDLER (MODIFIED FOR DUNGEONS) -------------
+# ------------- CORE TEXT HANDLER -------------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     chat_id, user, msg_lower = update.effective_chat.id, update.effective_user, update.message.text.lower()
     
     ensure_user_registered(update)
     
-# ⚔️ NEW: DUNGEON TYPING MECHANIC
+    # DUNGEON TYPING MECHANIC
     if chat_id in active_dungeons and active_dungeons[chat_id]["type"] == 2:
         if update.message.reply_to_message and update.message.reply_to_message.message_id == active_dungeons[chat_id]["msg_id"]:
             if msg_lower == active_dungeons[chat_id]["word"].lower():
                 await clear_dungeon(update, context, chat_id, [user.id])
                 return 
 
-    # ⚔️ NEW: DUNGEON TRIGGER COUNTER
+    # DUNGEON TRIGGER COUNTER
     if update.effective_chat.type in ["group", "supergroup"]:
         group_msg_counts[chat_id] += 1
         if group_msg_counts[chat_id] >= 30:
@@ -758,7 +781,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if user.id != OWNER_ID:
         hunter_db[user.id]["exp"] += 1 
-        if hunter_db[user.id]["exp"] % 5 == 0: save_hunter(user.id) # DB Save
+        if hunter_db[user.id]["exp"] % 5 == 0: save_hunter(user.id)
 
     if user.id in admins_db:
         if context.user_data.pop("awaiting_broadcast", None):
@@ -809,7 +832,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     replied = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
 
     if msg_lower in ["hi","hello","hey","yo","sup","hii","heyy","heya","cindy","cindrella","gm","gn"] and not mentioned and not replied:
-        await update.message.reply_text(random.choice(["Hey cutie 💖","hello sir 💕","Hey master 🌸","Yo! how’s your day? ☀️","Hii bestie"]))
+        await update.message.reply_text(random.choice(["System Online! 🌸","Guild Manager reporting! 💕","Hey Master! ⚔️","Dungeon ready when you are! ☀️"]))
     elif mentioned or replied:
         await ai_reply(update, context)
 
@@ -820,7 +843,6 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("admin", admin_panel))
     
-    # NEW: Button conflict fix using Regex patterns!
     application.add_handler(CallbackQueryHandler(admin_button_handler, pattern="^(broadcast|list_groups|add_admin|remove_admin|list_admins)$"))
     application.add_handler(CallbackQueryHandler(dungeon_button_handler, pattern="^dungeon_"))
     
