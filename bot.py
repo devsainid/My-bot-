@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Solo Leveling RPG + Admin Groups + Owner OP Mode)
+# bot.py - CINDRELLA final (Solo Leveling RPG + Admin Groups + OP Mode Fixed)
 import os
 import logging
 import json
@@ -18,13 +18,12 @@ from telegram.ext import (
     CallbackQueryHandler, ContextTypes, filters
 )
 from telegram.error import BadRequest
-from datetime import date, datetime as dt, time as dt_time
+from datetime import date, datetime as dt, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
 from collections import defaultdict
 
 # ----------------- CONFIG -----------------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-# Tera Owner ID default set kar diya hai
 OWNER_ID = int(os.environ.get("OWNER_ID", "6559745280"))
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
@@ -110,12 +109,29 @@ async def check_rights(update: Update, action: str) -> bool:
         return False
     except: return False
 
+def ensure_user_registered(update: Update):
+    """Ensures user is in the hunter_db and group database even if they only use commands."""
+    user = update.effective_user
+    chat = update.effective_chat
+    if not user: return
+    
+    username = f"@{user.username}" if user.username else ""
+    if user.id not in hunter_db:
+        hunter_db[user.id] = {"name": _display_name(user), "username": username, "exp": 0, "last_hunt": 0, "last_daily": ""}
+    
+    hunter_db[user.id]["name"] = _display_name(user)
+    hunter_db[user.id]["username"] = username
+    
+    if user.id == OWNER_ID:
+        hunter_db[user.id]["exp"] = 9999999 # Unlimited EXP for Owner
+        
+    if chat and chat.type in ["group", "supergroup"]:
+        chat_members_db[chat.id].add(user.id)
+        if chat.title: known_groups[chat.id] = chat.title
+
 # ------------- SOLO LEVELING RPG SYSTEM -------------
 def get_hunter_stats(exp, user_id=None):
-    # Owner ki OP Rank 😎
-    if user_id == OWNER_ID:
-        return "MAX", "🌍 National Level Hunter"
-        
+    if user_id == OWNER_ID: return "MAX", "🌍 National Level Hunter"
     level = (exp // 100) + 1
     if level <= 10: rank = "🪵 E-Rank"
     elif level <= 20: rank = "🪨 D-Rank"
@@ -126,14 +142,8 @@ def get_hunter_stats(exp, user_id=None):
     return level, rank
 
 async def hunter_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ensure_user_registered(update)
     user = update.effective_user
-    username = f"@{user.username}" if user.username else ""
-    
-    if user.id not in hunter_db:
-        hunter_db[user.id] = {"name": _display_name(user), "username": username, "exp": 0, "last_hunt": 0, "last_daily": ""}
-    
-    if user.id == OWNER_ID: hunter_db[user.id]["exp"] = 9999999 # Unlimited EXP for Owner
-    
     data = hunter_db[user.id]
     level, rank = get_hunter_stats(data["exp"], user.id)
     uname_display = f" ({data['username']})" if data['username'] else ""
@@ -142,20 +152,16 @@ async def hunter_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, parse_mode="Markdown")
 
 async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ensure_user_registered(update)
     user = update.effective_user
     now = time.time()
-    username = f"@{user.username}" if user.username else ""
-    
-    if user.id not in hunter_db:
-        hunter_db[user.id] = {"name": _display_name(user), "username": username, "exp": 0, "last_hunt": 0, "last_daily": ""}
-    
-    if user.id == OWNER_ID: hunter_db[user.id]["exp"] = 9999999
     data = hunter_db[user.id]
     
-    # Owner ke liye koi cooldown nahi, aam insaan ke liye 5 minute
-    if user.id != OWNER_ID and now - data["last_hunt"] < 300: 
-        wait = int(300 - (now - data["last_hunt"]))
-        return await update.message.reply_text(f"⏳ Dungeon portal closed! Wait {wait//60}m {wait%60}s.")
+    # 1 Hour Cooldown for everyone (including owner to prevent spam)
+    if now - data["last_hunt"] < 3600: 
+        wait = int(3600 - (now - data["last_hunt"]))
+        m, s = divmod(wait, 60)
+        return await update.message.reply_text(f"⏳ Dungeon portal closed! Wait {m}m {s}s to hunt again.")
     
     data["last_hunt"] = now
     events = [
@@ -176,26 +182,25 @@ async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"⛩️ **Dungeon Raid Results:**\n\n{event}\n⚡ **Total EXP:** {data['exp'] if level != 'MAX' else '∞'} | **Level:** {level}")
 
 async def daily_quest(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ensure_user_registered(update)
     user = update.effective_user
-    today = str(date.today())
-    username = f"@{user.username}" if user.username else ""
     
-    if user.id not in hunter_db:
-        hunter_db[user.id] = {"name": _display_name(user), "username": username, "exp": 0, "last_hunt": 0, "last_daily": ""}
+    # Reset at 1:00 AM IST
+    now_ist = dt.now(ZoneInfo("Asia/Kolkata"))
+    reset_day = str(now_ist.date() if now_ist.hour >= 1 else (now_ist - timedelta(days=1)).date())
     
-    if user.id == OWNER_ID: hunter_db[user.id]["exp"] = 9999999
     data = hunter_db[user.id]
-    
-    if data["last_daily"] == today and user.id != OWNER_ID:
-        return await update.message.reply_text("⏳ System: Daily Quest already completed today! Wait for tomorrow.")
+    if data["last_daily"] == reset_day:
+        return await update.message.reply_text("⏳ System: Daily Quest already completed! Next quest unlocks at 1:00 AM IST.")
         
-    data["last_daily"] = today
+    data["last_daily"] = reset_day
     if user.id != OWNER_ID: data["exp"] += 150
     
     level, rank = get_hunter_stats(data["exp"], user.id)
     await update.message.reply_text(f"🏋️‍♂️ **Daily Quest Completed!**\n100 Pushups, 100 Situps, 10km Run!\n\n🌟 +150 EXP Gained!\n📊 Current Level: {level}")
 
 async def top_hunter_local(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ensure_user_registered(update)
     chat_id = update.effective_chat.id
     if chat_id not in chat_members_db or not chat_members_db[chat_id]:
         return await update.message.reply_text("No hunters found in this guild yet.")
@@ -216,14 +221,13 @@ async def top_hunter_local(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, parse_mode="Markdown")
 
 async def world_top_global(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ensure_user_registered(update)
     sorted_hunters = sorted(hunter_db.values(), key=lambda x: x["exp"], reverse=True)[:10]
     if not sorted_hunters:
         return await update.message.reply_text("The world is empty. No hunters found.")
         
     text = "🌍 **WORLD TOP 10 S-RANK HUNTERS** 🌍\n\n"
     for i, h in enumerate(sorted_hunters, 1):
-        # We need the user id to pass to get_hunter_stats to format owner correctly
-        # Reverse lookup hack to find UID
         uid = next((k for k, v in hunter_db.items() if v == h), None)
         level, rank = get_hunter_stats(h["exp"], uid)
         uname = f" {h.get('username', '')}" if h.get("username") else ""
@@ -335,16 +339,30 @@ async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 `/world_top` - Global Top 10 S-Rank Hunters
 
 **🛠 Moderation:**
-`/ban`, `/unban`, `/kick`, `/mute`, `/unmute`, `/pin`, `/unpin`, `/promote`
-`/warn` - Warn user | `/unwarn` - Remove warn
+`/ban <reply/id>` - Ban a user
+`/unban <id>` - Unban a user
+`/kick <reply/id>` - Kick a user
+`/mute <reply/id>` - Mute a user
+`/unmute <reply/id>` - Unmute a user
+`/pin <reply>` - Pin a message
+`/unpin <reply>` - Unpin a message
+`/promote <reply/id>` - Promote user to Admin
+`/warn <reply> [reason]` - Warn user (3 warns = mute)
+`/unwarn <reply>` - Remove a warn
 
 **🧹 Purge:**
-`/purge`, `/purgeall`, `/purgegroup`
+`/purge <reply>` - Delete msgs from reply to current
+`/purgeall <reply>` - Delete all msgs of a user
+`/purgegroup` - Delete last 100 messages
 
 **🛡 Group Management:**
-`/addblacklist <word>`, `/rmblacklist <word>`, `/blocklist`
-`/addfilter <word> <reply>`, `/rmfilter <word>`
-`/setrules <text>`, `/rules`
+`/addblacklist <word>` - Auto delete bad word
+`/rmblacklist <word>` - Remove word from blacklist
+`/blocklist` - Show all blacklisted words
+`/addfilter <word> <reply>` - Set custom bot reply
+`/rmfilter <word>` - Remove custom filter
+`/setrules <text>` - Set group rules
+`/rules` - Show group rules
 
 **✨ Fun & Utils:**
 `/couple` - Couple of the day!
@@ -452,7 +470,6 @@ async def get_anime(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID: return await update.message.reply_text("❌ Only the Bot Owner can use this.")
     
-    # Ye le bhai, Remove Admin ko ekdum saaf-saaf alag line mein chamka diya!
     buttons = [
         [InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")],
         [InlineKeyboardButton("🌐 List Groups", callback_data="list_groups")],
@@ -564,25 +581,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     msg_lower = update.message.text.lower()
     
-    # 🌍 RPG & Tracking Updates
-    if update.effective_chat.type in ["group", "supergroup"]:
-        known_groups[chat_id] = update.effective_chat.title
-        chat_members_db[chat_id].add(user.id)
-        seen_members[chat_id][user.id] = {"name": _display_name(user), "is_bot": user.is_bot}
-
-    username = f"@{user.username}" if user.username else ""
-    if user.id not in hunter_db:
-        hunter_db[user.id] = {"name": _display_name(user), "username": username, "exp": 0, "last_hunt": 0, "last_daily": ""}
+    # 🌍 RPG & Tracking Updates properly handled through ensure_user_registered
+    ensure_user_registered(update)
     
-    # Update latest name/username and add Passive EXP
-    hunter_db[user.id]["name"] = _display_name(user)
-    hunter_db[user.id]["username"] = username
-    
-    # Owner God Mode - Infinite EXP so Owner is ALWAYS Top 1
-    if user.id == OWNER_ID:
-        hunter_db[user.id]["exp"] = 9999999
-    else:
-        hunter_db[user.id]["exp"] += 1 
+    if user.id != OWNER_ID: hunter_db[user.id]["exp"] += 1 
 
     # Owner commands processing
     if user.id == OWNER_ID:
