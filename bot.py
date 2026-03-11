@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Solo Leveling RPG + Admin Groups + Stats Reply + Give EXP)
+# bot.py - CINDRELLA final (MongoDB + Full Commands + OP RPG + AI)
 import os
 import logging
 import json
@@ -9,6 +9,7 @@ import asyncio
 import time
 import urllib.parse
 from flask import Flask
+from pymongo import MongoClient
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
     ChatPermissions, ChatMemberAdministrator, ChatMemberOwner, ChatMember
@@ -27,6 +28,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = int(os.environ.get("OWNER_ID", "6559745280"))
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+MONGO_URI = os.environ.get("MONGO_URI") # MongoDB Link
 
 ADMIN_IDS = set(json.loads(os.environ.get("ADMIN_IDS", "[]")))
 admins_db = ADMIN_IDS.union({OWNER_ID})
@@ -42,8 +44,6 @@ logging.basicConfig(
 usage_count = {"date": str(date.today()), "count": 0}
 seen_members = defaultdict(dict)
 couples_db = {}
-
-# Moderation State
 warnings_db = defaultdict(lambda: defaultdict(int)) 
 afk_db = {} 
 blacklist_db = defaultdict(set) 
@@ -52,9 +52,9 @@ rules_db = {}
 spam_tracker = defaultdict(lambda: defaultdict(list)) 
 
 # RPG & Global Group State
-known_groups = {} # chat_id -> title
-chat_members_db = defaultdict(set) # chat_id -> set of user_ids
-hunter_db = {} # user_id -> {"name": str, "username": str, "exp": int, "last_hunt": float, "last_daily": str}
+known_groups = {} 
+chat_members_db = defaultdict(set) 
+hunter_db = {} 
 
 WELCOME_MESSAGES = [
     "Welcome {name}! ✨ Glad you're here — have fun!",
@@ -65,69 +65,104 @@ WELCOME_MESSAGES = [
 ]
 WELCOME_BG_URL = "https://images.unsplash.com/photo-1519608487953-e999c86e7455?w=1200"
 
+# ----------------- MONGODB SETUP -----------------
+try:
+    if MONGO_URI:
+        mongo_client = MongoClient(MONGO_URI)
+        db = mongo_client["cindrella_db"]
+        hunters_col = db["hunters"]
+        groups_col = db["groups"]
+        admins_col = db["admins"]
+
+        # Load Admins
+        db_admins = admins_col.find_one({"_id": "admin_list"})
+        if db_admins: admins_db.update(db_admins.get("ids", []))
+
+        # Load Groups
+        for grp in groups_col.find(): known_groups[grp["_id"]] = grp["title"]
+
+        # Load Hunters
+        for hnt in hunters_col.find():
+            hunter_db[hnt["_id"]] = {
+                "name": hnt.get("name", "Unknown"),
+                "username": hnt.get("username", ""),
+                "exp": hnt.get("exp", 0),
+                "last_hunt": hnt.get("last_hunt", 0),
+                "last_daily": hnt.get("last_daily", "")
+            }
+        logging.info("✅ MongoDB Connected & Permanent Data Loaded!")
+    else:
+        logging.warning("⚠️ MONGO_URI not found. Using temporary RAM memory.")
+        hunters_col = groups_col = admins_col = None
+except Exception as e:
+    logging.error(f"❌ MongoDB Connection Error: {e}")
+    hunters_col = groups_col = admins_col = None
+
+def save_hunter(user_id):
+    if hunters_col is not None and user_id in hunter_db:
+        data = hunter_db[user_id].copy()
+        try: hunters_col.update_one({"_id": user_id}, {"$set": data}, upsert=True)
+        except: pass
+
+def save_group(chat_id, title):
+    if groups_col is not None:
+        try: groups_col.update_one({"_id": chat_id}, {"$set": {"title": title}}, upsert=True)
+        except: pass
+
+def save_admins():
+    if admins_col is not None:
+        try: admins_col.update_one({"_id": "admin_list"}, {"$set": {"ids": list(admins_db)}}, upsert=True)
+        except: pass
+
 # ---------- Helpers ----------
 def _display_name(user):
-    name = getattr(user, "full_name", None) or getattr(user, "first_name", None) or getattr(user, "username", None) or "User"
-    return str(name)
+    return str(getattr(user, "full_name", None) or getattr(user, "first_name", None) or getattr(user, "username", None) or "User")
 
 def mention_html(user_id: int, name: str) -> str:
-    safe = (name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
-    return f'<a href="tg://user?id={user_id}">{safe}</a>'
+    return f'<a href="tg://user?id={user_id}">{name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")}</a>'
 
 async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | None:
-    if update.message.reply_to_message:
-        return update.message.reply_to_message.from_user.id
+    if update.message.reply_to_message: return update.message.reply_to_message.from_user.id
     if context.args:
         arg = context.args[0]
         if re.fullmatch(r"@\w{5,}", arg):
-            try:
-                user = await context.bot.get_chat(arg)
-                return user.id
-            except:
-                return None
-        try:
-            return int(arg)
-        except:
-            return None
+            try: return (await context.bot.get_chat(arg)).id
+            except: return None
+        try: return int(arg)
+        except: return None
     return None
 
 async def check_rights(update: Update, action: str) -> bool:
-    user = update.effective_user
-    chat = update.effective_chat
+    user, chat = update.effective_user, update.effective_chat
     if user.id in admins_db: return True
     if chat.type == "private": return False
     try:
         member = await chat.get_member(user.id)
         if isinstance(member, ChatMemberOwner): return True
         if isinstance(member, ChatMemberAdministrator):
-            if action in ["ban", "kick", "mute", "unban", "unmute", "warn", "unwarn"]:
-                return member.can_restrict_members
+            if action in ["ban", "kick", "mute", "unban", "unmute", "warn", "unwarn"]: return member.can_restrict_members
             if action in ["pin", "unpin"]: return member.can_pin_messages
-            if action in ["purge", "purgeall", "purgegroup", "filter", "blacklist", "rules"]:
-                return member.can_delete_messages
+            if action in ["purge", "purgeall", "purgegroup", "filter", "blacklist", "rules"]: return member.can_delete_messages
             if action in ["promote", "demote"]: return member.can_promote_members
         return False
     except: return False
 
 def ensure_user_registered(update: Update):
-    """Ensures user is in the hunter_db and group database even if they only use commands."""
-    user = update.effective_user
-    chat = update.effective_chat
+    user, chat = update.effective_user, update.effective_chat
     if not user: return
-    
     username = f"@{user.username}" if user.username else ""
     if user.id not in hunter_db:
         hunter_db[user.id] = {"name": _display_name(user), "username": username, "exp": 0, "last_hunt": 0, "last_daily": ""}
     
     hunter_db[user.id]["name"] = _display_name(user)
     hunter_db[user.id]["username"] = username
-    
-    if user.id == OWNER_ID:
-        hunter_db[user.id]["exp"] = 9999999 # Unlimited EXP for Owner
+    if user.id == OWNER_ID: hunter_db[user.id]["exp"] = 9999999
         
     if chat and chat.type in ["group", "supergroup"]:
         chat_members_db[chat.id].add(user.id)
-        if chat.title: known_groups[chat.id] = chat.title
+        if chat.title and (chat.id not in known_groups or known_groups[chat.id] != chat.title):
+            known_groups[chat.id] = chat.title
+            save_group(chat.id, chat.title)
 
 # ------------- SOLO LEVELING RPG SYSTEM -------------
 def get_hunter_stats(exp, user_id=None):
@@ -143,19 +178,11 @@ def get_hunter_stats(exp, user_id=None):
 
 async def hunter_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
-    
-    # Check if replying to someone to see their stats
-    target_user = update.effective_user
-    if update.message.reply_to_message:
-        target_user = update.message.reply_to_message.from_user
-    
-    # Ensure target is in database
+    target_user = update.message.reply_to_message.from_user if update.message.reply_to_message else update.effective_user
     username = f"@{target_user.username}" if target_user.username else ""
     if target_user.id not in hunter_db:
         hunter_db[target_user.id] = {"name": _display_name(target_user), "username": username, "exp": 0, "last_hunt": 0, "last_daily": ""}
-    
-    if target_user.id == OWNER_ID:
-        hunter_db[target_user.id]["exp"] = 9999999
+    if target_user.id == OWNER_ID: hunter_db[target_user.id]["exp"] = 9999999
 
     data = hunter_db[target_user.id]
     level, rank = get_hunter_stats(data["exp"], target_user.id)
@@ -167,37 +194,29 @@ async def hunter_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
-    user = update.effective_user
-    now = time.time()
+    user, now = update.effective_user, time.time()
     data = hunter_db[user.id]
     
     if now - data["last_hunt"] < 3600: 
-        wait = int(3600 - (now - data["last_hunt"]))
-        m, s = divmod(wait, 60)
+        m, s = divmod(int(3600 - (now - data["last_hunt"])), 60)
         return await update.message.reply_text(f"⏳ Dungeon portal closed! Wait {m}m {s}s to hunt again.")
     
     data["last_hunt"] = now
     events = [
-        ("🟢 E-Rank Gate: Defeated 5 Goblins!", 25),
-        ("🟢 D-Rank Gate: Killed giant slimes.", 40),
-        ("🟡 C-Rank Gate: Fought High Orcs.", 70),
-        ("🔴 Boss Encounter! Barely escaped with your life.", -10),
-        ("🌟 Double Dungeon! You found a secret reward!", 120),
-        ("❌ Ambushed by another hunter! Lost some EXP.", -20)
+        ("🟢 E-Rank Gate: Defeated 5 Goblins!", 25), ("🟢 D-Rank Gate: Killed giant slimes.", 40),
+        ("🟡 C-Rank Gate: Fought High Orcs.", 70), ("🔴 Boss Encounter! Barely escaped with your life.", -10),
+        ("🌟 Double Dungeon! You found a secret reward!", 120), ("❌ Ambushed by another hunter! Lost some EXP.", -20)
     ]
     event, exp_gain = random.choice(events)
+    if user.id != OWNER_ID: data["exp"] = max(0, data["exp"] + exp_gain)
     
-    if user.id != OWNER_ID:
-        data["exp"] += exp_gain
-        if data["exp"] < 0: data["exp"] = 0
-    
+    save_hunter(user.id)
     level, rank = get_hunter_stats(data["exp"], user.id)
     await update.message.reply_text(f"⛩️ **Dungeon Raid Results:**\n\n{event}\n⚡ **Total EXP:** {data['exp'] if level != 'MAX' else '∞'} | **Level:** {level}")
 
 async def daily_quest(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     user = update.effective_user
-    
     now_ist = dt.now(ZoneInfo("Asia/Kolkata"))
     reset_day = str(now_ist.date() if now_ist.hour >= 1 else (now_ist - timedelta(days=1)).date())
     
@@ -208,108 +227,66 @@ async def daily_quest(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data["last_daily"] = reset_day
     if user.id != OWNER_ID: data["exp"] += 150
     
+    save_hunter(user.id)
     level, rank = get_hunter_stats(data["exp"], user.id)
     await update.message.reply_text(f"🏋️‍♂️ **Daily Quest Completed!**\n100 Pushups, 100 Situps, 10km Run!\n\n🌟 +150 EXP Gained!\n📊 Current Level: {level}")
 
 async def give_exp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     sender = update.effective_user
-    
-    if not update.message.reply_to_message:
-        return await update.message.reply_text("❌ Jisko EXP dena hai, uske message ka reply karke `/give <amount>` likho.")
-        
+    if not update.message.reply_to_message: return await update.message.reply_text("❌ Jisko EXP dena hai, uske message ka reply karke `/give <amount>` likho.")
     target = update.message.reply_to_message.from_user
-    
-    if sender.id == target.id:
-        return await update.message.reply_text("❌ Khud ko EXP nahi de sakte!")
-        
-    if not context.args or not context.args[0].isdigit():
-        return await update.message.reply_text("❌ Sahi format: `/give <amount>`")
+    if sender.id == target.id: return await update.message.reply_text("❌ Khud ko EXP nahi de sakte!")
+    if not context.args or not context.args[0].isdigit(): return await update.message.reply_text("❌ Sahi format: `/give <amount>`")
         
     amount = int(context.args[0])
-    if amount <= 0:
-        return await update.message.reply_text("❌ Amount 0 se zyada hona chahiye.")
+    if amount <= 0: return await update.message.reply_text("❌ Amount 0 se zyada hona chahiye.")
         
-    # Ensure target is in DB
     if target.id not in hunter_db:
-        username = f"@{target.username}" if target.username else ""
-        hunter_db[target.id] = {"name": _display_name(target), "username": username, "exp": 0, "last_hunt": 0, "last_daily": ""}
+        hunter_db[target.id] = {"name": _display_name(target), "username": f"@{target.username}" if target.username else "", "exp": 0, "last_hunt": 0, "last_daily": ""}
         
-    sender_data = hunter_db[sender.id]
-    target_data = hunter_db[target.id]
-    
-    # Owner verification check (Infinite EXP transfer)
+    sender_data, target_data = hunter_db[sender.id], hunter_db[target.id]
     if sender.id != OWNER_ID:
-        if sender_data["exp"] < amount:
-            return await update.message.reply_text(f"❌ Tumhare paas itni EXP nahi hai! (Current: {sender_data['exp']})")
+        if sender_data["exp"] < amount: return await update.message.reply_text(f"❌ Tumhare paas itni EXP nahi hai! (Current: {sender_data['exp']})")
         sender_data["exp"] -= amount
         
     target_data["exp"] += amount
+    save_hunter(sender.id); save_hunter(target.id)
     
-    safe_sender = str(sender_data['name']).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    safe_target = str(target_data['name']).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    
-    await update.message.reply_text(f"💸 <b>EXP Transferred!</b>\n\n<b>{safe_sender}</b> gave <b>{amount} EXP</b> to <b>{safe_target}</b> ⚡", parse_mode="HTML")
+    await update.message.reply_text(f"💸 <b>EXP Transferred!</b>\n\n<b>{str(sender_data['name']).replace('<','&lt;')}</b> gave <b>{amount} EXP</b> to <b>{str(target_data['name']).replace('<','&lt;')}</b> ⚡", parse_mode="HTML")
 
 async def top_hunter_local(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     chat_id = update.effective_chat.id
-    if chat_id not in chat_members_db or not chat_members_db[chat_id]:
-        return await update.message.reply_text("No hunters found in this guild yet.")
-        
-    members = chat_members_db[chat_id]
-    local_hunters = [uid for uid in members if uid in hunter_db]
-    sorted_hunters = sorted(local_hunters, key=lambda x: hunter_db[x]["exp"], reverse=True)[:10]
-    
-    if not sorted_hunters:
-        return await update.message.reply_text("No active hunters in this guild.")
+    members = chat_members_db.get(chat_id, set())
+    sorted_hunters = sorted([uid for uid in members if uid in hunter_db], key=lambda x: hunter_db[x]["exp"], reverse=True)[:10]
+    if not sorted_hunters: return await update.message.reply_text("No active hunters in this guild.")
         
     text = "🏆 <b>TOP 10 GUILD HUNTERS</b> 🏆\n\n"
     for i, uid in enumerate(sorted_hunters, 1):
         h = hunter_db[uid]
         level, rank = get_hunter_stats(h["exp"], uid)
-        uname = f" {h.get('username', '')}" if h.get("username") else ""
-        safe_name = str(h['name']).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        text += f"<b>{i}.</b> {safe_name}{uname} - Lvl {level} ({rank})\n"
-        
-    try:
-        await update.message.reply_text(text, parse_mode="HTML")
-    except Exception as e:
-        logging.error(f"Top Hunter Error: {e}")
-        await update.message.reply_text("System Error loading hunter list.")
+        text += f"<b>{i}.</b> {str(h['name']).replace('<','&lt;')}{' '+h.get('username') if h.get('username') else ''} - Lvl {level} ({rank})\n"
+    await update.message.reply_text(text, parse_mode="HTML")
 
 async def world_top_global(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
-    sorted_hunters = sorted(hunter_db.values(), key=lambda x: x["exp"], reverse=True)[:10]
-    if not sorted_hunters:
-        return await update.message.reply_text("The world is empty. No hunters found.")
+    sorted_hunters = sorted(hunter_db.items(), key=lambda x: x[1]["exp"], reverse=True)[:10]
+    if not sorted_hunters: return await update.message.reply_text("The world is empty. No hunters found.")
         
     text = "🌍 <b>WORLD TOP 10 S-RANK HUNTERS</b> 🌍\n\n"
-    for i, h in enumerate(sorted_hunters, 1):
-        uid = next((k for k, v in hunter_db.items() if v == h), None)
+    for i, (uid, h) in enumerate(sorted_hunters, 1):
         level, rank = get_hunter_stats(h["exp"], uid)
-        uname = f" {h.get('username', '')}" if h.get("username") else ""
-        safe_name = str(h['name']).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        text += f"<b>{i}.</b> {safe_name}{uname} - Lvl {level} ({rank})\n"
-        
-    try:
-        await update.message.reply_text(text, parse_mode="HTML")
-    except Exception as e:
-        logging.error(f"World Top Error: {e}")
-        await update.message.reply_text("System Error loading world list.")
+        text += f"<b>{i}.</b> {str(h['name']).replace('<','&lt;')}{' '+h.get('username') if h.get('username') else ''} - Lvl {level} ({rank})\n"
+    await update.message.reply_text(text, parse_mode="HTML")
 
 # ------------- MODERATION COMMANDS -------------
 async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     action = update.message.text.split()[0][1:].split('@')[0].lower()
-    
-    if not await check_rights(update, action):
-        return await update.message.reply_text("❌ You don't have Admin rights to do this.")
-
+    if not await check_rights(update, action): return await update.message.reply_text("❌ You don't have Admin rights to do this.")
     target_id = await get_user_id(update, context)
-    if not target_id and action not in ["unpin"]:
-        return await update.message.reply_text("❌ Reply to a user or provide an ID/Username.")
-
+    if not target_id and action not in ["unpin"]: return await update.message.reply_text("❌ Reply to a user or provide an ID/Username.")
     chat_id = update.effective_chat.id
 
     try:
@@ -327,47 +304,30 @@ async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.restrict_chat_member(chat_id, target_id, permissions=ChatPermissions(can_send_messages=False))
             await update.message.reply_text(f"🔇 Muted {target_id}.")
         elif action == "unmute":
-            await context.bot.restrict_chat_member(
-                chat_id, target_id,
-                permissions=ChatPermissions(
-                    can_send_messages=True, can_send_audios=True, can_send_documents=True,
-                    can_send_photos=True, can_send_videos=True, can_send_video_notes=True,
-                    can_send_voice_notes=True, can_send_polls=True, can_send_other_messages=True, 
-                    can_add_web_page_previews=True
-                )
-            )
+            await context.bot.restrict_chat_member(chat_id, target_id, permissions=ChatPermissions(can_send_messages=True, can_send_audios=True, can_send_documents=True, can_send_photos=True, can_send_videos=True, can_send_other_messages=True, can_add_web_page_previews=True))
             await update.message.reply_text(f"🔊 Unmuted {target_id}.")
         elif action == "pin":
-            if not update.message.reply_to_message: return await update.message.reply_text("❌ Reply to a message to pin.")
-            await context.bot.pin_chat_message(chat_id, update.message.reply_to_message.message_id)
+            if update.message.reply_to_message: await context.bot.pin_chat_message(chat_id, update.message.reply_to_message.message_id)
         elif action == "unpin":
             if update.message.reply_to_message: await context.bot.unpin_chat_message(chat_id, update.message.reply_to_message.message_id)
             else: await context.bot.unpin_chat_message(chat_id)
             await update.message.reply_text("✅ Unpinned.")
         elif action == "promote":
-            await context.bot.promote_chat_member(
-                chat_id, target_id, can_manage_chat=True, can_delete_messages=True,
-                can_manage_video_chats=True, can_restrict_members=True, can_promote_members=False, 
-                can_change_info=True, can_invite_users=True, can_pin_messages=True
-            )
+            await context.bot.promote_chat_member(chat_id, target_id, can_manage_chat=True, can_delete_messages=True, can_manage_video_chats=True, can_restrict_members=True, can_promote_members=False, can_change_info=True, can_invite_users=True, can_pin_messages=True)
             await update.message.reply_text(f"🌟 Promoted {target_id} to Admin.")
     except BadRequest as e: await update.message.reply_text(f"❌ Error: {e.message}")
     except Exception as e: await update.message.reply_text(f"❌ System Error: {e}")
 
-# ------------- PURGE COMMANDS -------------
 async def purge(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "purge"): return await update.message.reply_text("❌ Admin rights required.")
     if not update.message.reply_to_message: return await update.message.reply_text("❌ Reply to the oldest message.")
     try:
-        start_id = update.message.reply_to_message.message_id
-        end_id = update.message.message_id
-        chat_id = update.effective_chat.id
+        start_id, end_id, chat_id = update.message.reply_to_message.message_id, update.message.message_id, update.effective_chat.id
         msg_ids = list(range(start_id, end_id + 1))
         for i in range(0, len(msg_ids), 100):
             try: await context.bot.delete_messages(chat_id, msg_ids[i:i+100])
             except: pass 
-        ack = await context.bot.send_message(chat_id, "✅ Purge complete.")
-        await asyncio.sleep(3); await ack.delete()
+        ack = await context.bot.send_message(chat_id, "✅ Purge complete."); await asyncio.sleep(3); await ack.delete()
     except Exception as e: await update.message.reply_text(f"Error: {e}")
 
 async def purge_all_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -376,21 +336,19 @@ async def purge_all_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not target_id: return await update.message.reply_text("Reply to a user.")
     try:
         await context.bot.ban_chat_member(update.effective_chat.id, target_id, revoke_messages=True)
-        await update.message.reply_text(f"✅ All messages from {target_id} deleted.")
         await context.bot.unban_chat_member(update.effective_chat.id, target_id)
+        await update.message.reply_text(f"✅ All messages from {target_id} deleted.")
     except Exception as e: await update.message.reply_text(f"Error: {e}")
 
 async def purge_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "purgegroup"): return await update.message.reply_text("❌ Admin rights required.")
-    chat_id = update.effective_chat.id
-    curr = update.message.message_id
+    chat_id, curr = update.effective_chat.id, update.message.message_id
     try:
         await context.bot.delete_messages(chat_id, list(range(curr - 100, curr + 1)))
-        ack = await context.bot.send_message(chat_id, "✅ Group cleanup (Last 100).")
-        await asyncio.sleep(5); await ack.delete()
+        ack = await context.bot.send_message(chat_id, "✅ Group cleanup (Last 100)."); await asyncio.sleep(5); await ack.delete()
     except: await update.message.reply_text("❌ Messages too old/already deleted.")
 
-# ------------- PRO FEATURES -------------
+# ------------- PRO FEATURES (FULL MENU RESTORED) -------------
 async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = """
 🌹 **CINDRELLA COMMANDS** 🌹
@@ -444,20 +402,17 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     try:
         target_member = await context.bot.get_chat_member(chat_id, target_id)
-        if target_id in admins_db or target_member.status in ['administrator', 'creator']:
-            return await update.message.reply_text("❌ Cannot warn an Admin.")
+        if target_id in admins_db or target_member.status in ['administrator', 'creator']: return await update.message.reply_text("❌ Cannot warn an Admin.")
     except: pass
 
     warnings_db[chat_id][target_id] += 1
     count = warnings_db[chat_id][target_id]
     reason = " ".join(context.args) if context.args else "No reason given."
-    
     if count >= 3:
         await context.bot.restrict_chat_member(chat_id, target_id, permissions=ChatPermissions(can_send_messages=False))
         warnings_db[chat_id][target_id] = 0
         await update.message.reply_text(f"🛑 User {target_id} reached 3 warnings and is now MUTED!")
-    else:
-        await update.message.reply_text(f"⚠️ Warned {target_id}! ({count}/3)\nReason: {reason}")
+    else: await update.message.reply_text(f"⚠️ Warned {target_id}! ({count}/3)\nReason: {reason}")
 
 async def unwarn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "unwarn"): return await update.message.reply_text("❌ Admin rights required.")
@@ -482,16 +437,12 @@ async def show_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def add_blacklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "blacklist"): return await update.message.reply_text("❌ Admin rights required.")
     if not context.args: return await update.message.reply_text("❌ Provide a word.")
-    word = context.args[0].lower()
-    blacklist_db[update.effective_chat.id].add(word)
-    await update.message.reply_text(f"✅ Word '{word}' added to blacklist.")
+    blacklist_db[update.effective_chat.id].add(context.args[0].lower()); await update.message.reply_text(f"✅ Word '{context.args[0]}' added.")
 
 async def rm_blacklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "blacklist"): return await update.message.reply_text("❌ Admin rights required.")
     if not context.args: return await update.message.reply_text("❌ Provide a word.")
-    word = context.args[0].lower()
-    blacklist_db[update.effective_chat.id].discard(word)
-    await update.message.reply_text(f"✅ Word '{word}' removed from blacklist.")
+    blacklist_db[update.effective_chat.id].discard(context.args[0].lower()); await update.message.reply_text(f"✅ Word '{context.args[0]}' removed.")
 
 async def show_blocklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "blacklist"): return await update.message.reply_text("❌ Admin rights required.")
@@ -503,14 +454,12 @@ async def add_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "filter"): return await update.message.reply_text("❌ Admin rights required.")
     text = update.message.text.split(None, 2)
     if len(text) < 3: return await update.message.reply_text("❌ Format: /addfilter <word> <reply>")
-    filters_db[update.effective_chat.id][text[1].lower()] = text[2]
-    await update.message.reply_text(f"✅ Filter added for '{text[1].lower()}'.")
+    filters_db[update.effective_chat.id][text[1].lower()] = text[2]; await update.message.reply_text(f"✅ Filter added.")
 
 async def rm_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "filter"): return await update.message.reply_text("❌ Admin rights required.")
     if not context.args: return await update.message.reply_text("❌ Provide a word.")
-    filters_db[update.effective_chat.id].pop(context.args[0].lower(), None)
-    await update.message.reply_text(f"✅ Filter removed for '{context.args[0].lower()}'.")
+    filters_db[update.effective_chat.id].pop(context.args[0].lower(), None); await update.message.reply_text(f"✅ Filter removed.")
 
 async def set_afk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reason = " ".join(context.args) if context.args else "No reason"
@@ -526,15 +475,13 @@ async def get_anime(update: Update, context: ContextTypes.DEFAULT_TYPE):
             data = res.json()
             if data['data']:
                 anime = data['data'][0]
-                text = f"🎬 **{anime['title']}**\n\n📊 Score: {anime.get('score', 'N/A')}\n🎞 Episodes: {anime.get('episodes', 'N/A')}\n🔄 Status: {anime.get('status', 'N/A')}\n\n🔗 [More Info]({anime['url']})"
-                await update.message.reply_text(text, parse_mode="Markdown")
+                await update.message.reply_text(f"🎬 **{anime['title']}**\n\n📊 Score: {anime.get('score', 'N/A')}\n🎞 Episodes: {anime.get('episodes', 'N/A')}\n🔄 Status: {anime.get('status', 'N/A')}\n\n🔗 [More Info]({anime['url']})", parse_mode="Markdown")
             else: await update.message.reply_text("❌ Anime not found!")
     except: await update.message.reply_text("❌ API error.")
 
 # ------------- ADMIN PANEL (OWNER ONLY) -------------
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID: return await update.message.reply_text("❌ Only the Bot Owner can use this.")
-    
     buttons = [
         [InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")],
         [InlineKeyboardButton("🌐 List Groups", callback_data="list_groups")],
@@ -542,8 +489,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("➖ Remove Bot Admin", callback_data="remove_admin")],
         [InlineKeyboardButton("📋 List Admins", callback_data="list_admins")]
     ]
-    usage_info = f"\n📊 Replies Today: {usage_count['count']} (Date: {usage_count['date']})"
-    await update.message.reply_text("🤖 **Bot Owner Panel**" + usage_info, reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
+    await update.message.reply_text(f"🤖 **Bot Owner Panel**\n📊 Replies Today: {usage_count['count']}", reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
 
 async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -559,14 +505,9 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         text = "🌐 <b>Bot Groups & Links:</b>\n\n"
         for cid, title in list(known_groups.items()):
             safe_title = str(title).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-            try:
-                link = await context.bot.export_chat_invite_link(cid)
-                text += f"🔹 {safe_title}: <a href='{link}'>Invite Link</a>\n"
-            except:
-                text += f"🔹 {safe_title}: <i>(No Admin Rights)</i>\n"
-        
-        for i in range(0, len(text), 4000):
-            await query.message.reply_text(text[i:i+4000], parse_mode="HTML", disable_web_page_preview=True)
+            try: link = await context.bot.export_chat_invite_link(cid); text += f"🔹 {safe_title}: <a href='{link}'>Invite Link</a>\n"
+            except: text += f"🔹 {safe_title}: <i>(No Admin Rights)</i>\n"
+        for i in range(0, len(text), 4000): await query.message.reply_text(text[i:i+4000], parse_mode="HTML", disable_web_page_preview=True)
     elif query.data == "add_admin":
         await query.message.reply_text("Send user ID to add as Bot Admin:")
         context.user_data["awaiting_add_admin"] = True
@@ -582,8 +523,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Hey, I'm CINDRELLA 🌹—your group manager & AI bestie!\nType /commands to see what I can do!", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    chat = update.effective_chat
+    chat_id, chat = update.effective_chat.id, update.effective_chat
     try: member_count = await chat.get_member_count()
     except: member_count = "New"
 
@@ -591,9 +531,7 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
         seen_members[chat_id][member.id] = {"name": _display_name(member), "is_bot": member.is_bot}
         if not member.is_bot:
             username = f"@{member.username}" if member.username else "No Username"
-            userDetails = f"\n🆔 UserID: {member.id}\n👤 Username: {username}\n📜 Bio: System Hidden"
-            final_msg = random.choice(WELCOME_MESSAGES).format(name=_display_name(member)) + userDetails
-            
+            final_msg = random.choice(WELCOME_MESSAGES).format(name=_display_name(member)) + f"\n🆔 UserID: {member.id}\n👤 Username: {username}\n📜 Bio: System Hidden"
             try:
                 safe_name = urllib.parse.quote(_display_name(member))
                 safe_chat = urllib.parse.quote(chat.title or "Our Group")
@@ -608,11 +546,10 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
-
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
     system_prompt = "You are CINDRELLA, a bold, sassy, flirty, and smart Gen-Z girl. You are a Telegram group manager. Always reply in Hinglish or English. Keep your replies very short (1-2 lines), engaging, and playful. Never act like an AI."
-    models = ["meta-llama/llama-3.3-70b-instruct:free", "google/gemma-3-27b-it:free", "nvidia/nemotron-3-nano-30b-a3b:free", "stepfun/step-3.5-flash:free", "arcee-ai/trinity-large-preview:free", "meta-llama/llama-3.2-3b-instruct:free", "liquid/lfm-2.5-1.2b-thinking:free"]
-
+    models = ["meta-llama/llama-3.3-70b-instruct:free", "google/gemma-3-27b-it:free", "nvidia/nemotron-3-nano-30b-a3b:free", "stepfun/step-3.5-flash:free", "arcee-ai/trinity-large-preview:free"]
+    
     for model in models:
         try:
             payload = {"model": model, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": message_text}]}
@@ -628,8 +565,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except: pass
 
 async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    sender = update.effective_user
+    chat_id, sender = update.effective_chat.id, update.effective_user
     seen_members[chat_id][sender.id] = {"name": _display_name(sender), "is_bot": getattr(sender, "is_bot", False)}
     today_str = str(date.today())
     if couples_db.get(chat_id, {}).get("date") == today_str:
@@ -644,27 +580,30 @@ async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
-    chat_id = update.effective_chat.id
-    user = update.effective_user
-    msg_lower = update.message.text.lower()
+    chat_id, user, msg_lower = update.effective_chat.id, update.effective_user, update.message.text.lower()
     
     ensure_user_registered(update)
-    
-    if user.id != OWNER_ID: hunter_db[user.id]["exp"] += 1 
+    if user.id != OWNER_ID:
+        hunter_db[user.id]["exp"] += 1 
+        if hunter_db[user.id]["exp"] % 5 == 0: save_hunter(user.id) # DB Save
 
     if user.id == OWNER_ID:
         if context.user_data.pop("awaiting_broadcast", None):
-            for aid in admins_db:
-                try: await context.bot.send_message(aid, f"📢 Broadcast:\n{update.message.text}")
+            success = 0
+            for cid in list(known_groups.keys()):
+                try: 
+                    await context.bot.send_message(cid, f"📢 **Broadcast Message:**\n\n{update.message.text}", parse_mode="Markdown")
+                    success += 1
                 except: pass
-            return await update.message.reply_text("✅ Broadcast sent.")
+            return await update.message.reply_text(f"✅ Broadcast sent to {success} groups!")
+            
         if context.user_data.pop("awaiting_add_admin", None):
-            try: admins_db.add(int(update.message.text.strip())); await update.message.reply_text("✅ Admin added.")
+            try: admins_db.add(int(update.message.text.strip())); save_admins(); await update.message.reply_text("✅ Admin added.")
             except: await update.message.reply_text("❌ Invalid ID.")
             return
         if context.user_data.pop("awaiting_remove_admin", None):
             try: 
-                if int(update.message.text.strip()) != OWNER_ID: admins_db.discard(int(update.message.text.strip())); await update.message.reply_text("✅ Removed.")
+                if int(update.message.text.strip()) != OWNER_ID: admins_db.discard(int(update.message.text.strip())); save_admins(); await update.message.reply_text("✅ Removed.")
             except: await update.message.reply_text("❌ Invalid ID.")
             return
 
@@ -677,7 +616,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.restrict_chat_member(chat_id, user.id, permissions=ChatPermissions(can_send_messages=False))
                 return await context.bot.send_message(chat_id, f"🚫 {_display_name(user)} muted for spamming.")
             except: pass
-        
         if any(word in msg_lower for word in blacklist_db[chat_id]):
             try:
                 await update.message.delete()
@@ -685,8 +623,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except: pass
 
     if user.id in afk_db:
-        afk_db.pop(user.id)
-        await update.message.reply_text(f"👋 Welcome back {_display_name(user)}, AFK removed!")
+        afk_db.pop(user.id); await update.message.reply_text(f"👋 Welcome back {_display_name(user)}, AFK removed!")
     if update.message.reply_to_message and update.message.reply_to_message.from_user.id in afk_db:
         afk_user = afk_db[update.message.reply_to_message.from_user.id]
         await update.message.reply_text(f"💤 {afk_user['name']} is currently AFK: {afk_user['reason']}")
@@ -716,16 +653,12 @@ def main():
     application.add_handler(CommandHandler("stats", hunter_profile))
     application.add_handler(CommandHandler("hunt", hunt))
     application.add_handler(CommandHandler("daily", daily_quest))
-    application.add_handler(CommandHandler("give", give_exp)) # NEW GIVE COMMAND
+    application.add_handler(CommandHandler("give", give_exp))
     application.add_handler(CommandHandler("top_hunter", top_hunter_local))
     application.add_handler(CommandHandler("world_top", world_top_global))
 
     mod_cmds = ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote"]
     application.add_handler(CommandHandler(mod_cmds, mod_action))
-
-    application.add_handler(CommandHandler("purge", purge))
-    application.add_handler(CommandHandler("purgeall", purge_all_user))
-    application.add_handler(CommandHandler("purgegroup", purge_group))
     
     application.add_handler(CommandHandler("warn", warn_user))
     application.add_handler(CommandHandler("unwarn", unwarn_user))
@@ -740,6 +673,10 @@ def main():
     application.add_handler(CommandHandler("anime", get_anime))
     application.add_handler(CommandHandler("couple", couple_command))
 
+    application.add_handler(CommandHandler("purge", purge))
+    application.add_handler(CommandHandler("purgeall", purge_all_user))
+    application.add_handler(CommandHandler("purgegroup", purge_group))
+    
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
@@ -748,11 +685,7 @@ def main():
         application.job_queue.run_daily(couple_daily_reset, time=dt_time(hour=1, minute=0, tzinfo=ist))
 
     logging.info("🤖 Bot starting...")
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000)),
-        webhook_url=WEBHOOK_URL
-    )
+    application.run_webhook(listen="0.0.0.0", port=int(os.environ.get("PORT", 10000)), webhook_url=WEBHOOK_URL)
 
 if __name__ == "__main__":
     main()
