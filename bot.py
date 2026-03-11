@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (MongoDB + Full Commands + OP RPG + AI)
+# bot.py - CINDRELLA final (No Purgeall + DB Couple Fix + Pro Admin Panel)
 import os
 import logging
 import json
@@ -28,7 +28,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = int(os.environ.get("OWNER_ID", "6559745280"))
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
-MONGO_URI = os.environ.get("MONGO_URI") # MongoDB Link
+MONGO_URI = os.environ.get("MONGO_URI") 
 
 ADMIN_IDS = set(json.loads(os.environ.get("ADMIN_IDS", "[]")))
 admins_db = ADMIN_IDS.union({OWNER_ID})
@@ -42,7 +42,6 @@ logging.basicConfig(
 
 # ----------------- STATE -----------------
 usage_count = {"date": str(date.today()), "count": 0}
-seen_members = defaultdict(dict)
 couples_db = {}
 warnings_db = defaultdict(lambda: defaultdict(int)) 
 afk_db = {} 
@@ -59,9 +58,7 @@ hunter_db = {}
 WELCOME_MESSAGES = [
     "Welcome {name}! ✨ Glad you're here — have fun!",
     "Hey {name} 👋 — nice to see you! Introduce yourself 😄",
-    "A lovely hello to {name} 🌸 — welcome to the fam!",
-    "Oye {name} 😍 — welcome! Ready to vibe?",
-    "Welcome, {name}! Make yourself at home 💖"
+    "A lovely hello to {name} 🌸 — welcome to the fam!"
 ]
 WELCOME_BG_URL = "https://images.unsplash.com/photo-1519608487953-e999c86e7455?w=1200"
 
@@ -74,14 +71,11 @@ try:
         groups_col = db["groups"]
         admins_col = db["admins"]
 
-        # Load Admins
         db_admins = admins_col.find_one({"_id": "admin_list"})
         if db_admins: admins_db.update(db_admins.get("ids", []))
 
-        # Load Groups
         for grp in groups_col.find(): known_groups[grp["_id"]] = grp["title"]
 
-        # Load Hunters
         for hnt in hunters_col.find():
             hunter_db[hnt["_id"]] = {
                 "name": hnt.get("name", "Unknown"),
@@ -116,7 +110,7 @@ def save_admins():
 
 # ---------- Helpers ----------
 def _display_name(user):
-    return str(getattr(user, "full_name", None) or getattr(user, "first_name", None) or getattr(user, "username", None) or "User")
+    return str(getattr(user, "first_name", None) or getattr(user, "username", None) or "User")
 
 def mention_html(user_id: int, name: str) -> str:
     return f'<a href="tg://user?id={user_id}">{name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")}</a>'
@@ -142,7 +136,7 @@ async def check_rights(update: Update, action: str) -> bool:
         if isinstance(member, ChatMemberAdministrator):
             if action in ["ban", "kick", "mute", "unban", "unmute", "warn", "unwarn"]: return member.can_restrict_members
             if action in ["pin", "unpin"]: return member.can_pin_messages
-            if action in ["purge", "purgeall", "purgegroup", "filter", "blacklist", "rules"]: return member.can_delete_messages
+            if action in ["purge", "purgegroup", "filter", "blacklist", "rules"]: return member.can_delete_messages
             if action in ["promote", "demote"]: return member.can_promote_members
         return False
     except: return False
@@ -159,7 +153,9 @@ def ensure_user_registered(update: Update):
     if user.id == OWNER_ID: hunter_db[user.id]["exp"] = 9999999
         
     if chat and chat.type in ["group", "supergroup"]:
+        # Record member in group for Couple command and Top Hunters
         chat_members_db[chat.id].add(user.id)
+        
         if chat.title and (chat.id not in known_groups or known_groups[chat.id] != chat.title):
             known_groups[chat.id] = chat.title
             save_group(chat.id, chat.title)
@@ -330,16 +326,6 @@ async def purge(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ack = await context.bot.send_message(chat_id, "✅ Purge complete."); await asyncio.sleep(3); await ack.delete()
     except Exception as e: await update.message.reply_text(f"Error: {e}")
 
-async def purge_all_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_rights(update, "purgeall"): return await update.message.reply_text("❌ Admin rights required.")
-    target_id = await get_user_id(update, context)
-    if not target_id: return await update.message.reply_text("Reply to a user.")
-    try:
-        await context.bot.ban_chat_member(update.effective_chat.id, target_id, revoke_messages=True)
-        await context.bot.unban_chat_member(update.effective_chat.id, target_id)
-        await update.message.reply_text(f"✅ All messages from {target_id} deleted.")
-    except Exception as e: await update.message.reply_text(f"Error: {e}")
-
 async def purge_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "purgegroup"): return await update.message.reply_text("❌ Admin rights required.")
     chat_id, curr = update.effective_chat.id, update.message.message_id
@@ -348,16 +334,16 @@ async def purge_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ack = await context.bot.send_message(chat_id, "✅ Group cleanup (Last 100)."); await asyncio.sleep(5); await ack.delete()
     except: await update.message.reply_text("❌ Messages too old/already deleted.")
 
-# ------------- PRO FEATURES (FULL MENU RESTORED) -------------
+# ------------- PRO FEATURES -------------
 async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = """
 🌹 **CINDRELLA COMMANDS** 🌹
 
 **⚔️ Solo Leveling (RPG):**
-`/stats [reply]` - Check Hunter License (Yours or replied)
+`/stats [reply]` - Check Hunter License
 `/hunt` - Enter Dungeon & Kill Monsters
 `/daily` - Daily System Quest (+150 EXP)
-`/give <reply> <amount>` - Donate EXP to another hunter
+`/give <reply> <amount>` - Donate EXP
 `/top_hunter` - Top 10 Hunters in Group
 `/world_top` - Global Top 10 S-Rank Hunters
 
@@ -370,12 +356,11 @@ async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 `/pin <reply>` - Pin a message
 `/unpin <reply>` - Unpin a message
 `/promote <reply/id>` - Promote user to Admin
-`/warn <reply> [reason]` - Warn user (3 warns = mute)
+`/warn <reply> [reason]` - Warn user
 `/unwarn <reply>` - Remove a warn
 
 **🧹 Purge:**
 `/purge <reply>` - Delete msgs from reply to current
-`/purgeall <reply>` - Delete all msgs of a user
 `/purgegroup` - Delete last 100 messages
 
 **🛡 Group Management:**
@@ -391,7 +376,7 @@ async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 `/couple` - Couple of the day!
 `/afk [reason]` - Set AFK status
 `/anime [name]` - Search for an anime
-`/admin` - Bot Owner panel
+`/admin` - Bot Admin Panel
     """
     await update.message.reply_text(text, parse_mode="Markdown")
 
@@ -479,21 +464,35 @@ async def get_anime(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else: await update.message.reply_text("❌ Anime not found!")
     except: await update.message.reply_text("❌ API error.")
 
-# ------------- ADMIN PANEL (OWNER ONLY) -------------
+# ------------- ADMIN PANEL (OWNER vs ADMIN) -------------
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != OWNER_ID: return await update.message.reply_text("❌ Only the Bot Owner can use this.")
-    buttons = [
-        [InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")],
-        [InlineKeyboardButton("🌐 List Groups", callback_data="list_groups")],
-        [InlineKeyboardButton("➕ Add Bot Admin", callback_data="add_admin")],
-        [InlineKeyboardButton("➖ Remove Bot Admin", callback_data="remove_admin")],
-        [InlineKeyboardButton("📋 List Admins", callback_data="list_admins")]
-    ]
-    await update.message.reply_text(f"🤖 **Bot Owner Panel**\n📊 Replies Today: {usage_count['count']}", reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
+    user_id = update.effective_user.id
+    if user_id not in admins_db: 
+        return await update.message.reply_text("❌ Only Bot Admins & Owner can use this.")
+    
+    # OWNER PANEL (Full Access)
+    if user_id == OWNER_ID:
+        buttons = [
+            [InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")],
+            [InlineKeyboardButton("🌐 List Groups", callback_data="list_groups")],
+            [InlineKeyboardButton("➕ Add Bot Admin", callback_data="add_admin"), InlineKeyboardButton("➖ Remove Bot Admin", callback_data="remove_admin")],
+            [InlineKeyboardButton("📋 List Admins", callback_data="list_admins")]
+        ]
+        await update.message.reply_text(f"👑 **Owner Panel**\n📊 Replies Today: {usage_count['count']}", reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
+    
+    # BOT ADMIN PANEL (Limited Access)
+    else:
+        buttons = [
+            [InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")],
+            [InlineKeyboardButton("🌐 List Groups", callback_data="list_groups")],
+            [InlineKeyboardButton("📋 List Admins", callback_data="list_admins")]
+        ]
+        await update.message.reply_text(f"🛠 **Bot Admin Panel**\n📊 Replies Today: {usage_count['count']}", reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
 
 async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != OWNER_ID: return await query.answer()
+    user_id = query.from_user.id
+    if user_id not in admins_db: return await query.answer("❌ You are not a Bot Admin!", show_alert=True)
     await query.answer()
 
     if query.data == "broadcast":
@@ -509,13 +508,26 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             except: text += f"🔹 {safe_title}: <i>(No Admin Rights)</i>\n"
         for i in range(0, len(text), 4000): await query.message.reply_text(text[i:i+4000], parse_mode="HTML", disable_web_page_preview=True)
     elif query.data == "add_admin":
+        if user_id != OWNER_ID: return await query.message.reply_text("❌ Only the Owner can add admins.")
         await query.message.reply_text("Send user ID to add as Bot Admin:")
         context.user_data["awaiting_add_admin"] = True
     elif query.data == "remove_admin":
+        if user_id != OWNER_ID: return await query.message.reply_text("❌ Only the Owner can remove admins.")
         await query.message.reply_text("Send user ID to remove from Bot Admins:")
         context.user_data["awaiting_remove_admin"] = True
     elif query.data == "list_admins":
-        await query.message.reply_text("Current Bot Admins IDs:\n" + "\n".join([str(aid) for aid in admins_db]))
+        admin_text = "📋 **Current Bot Admins:**\n\n"
+        for aid in admins_db:
+            if aid == OWNER_ID:
+                admin_text += f"👑 Owner (`{aid}`)\n"
+            else:
+                if aid in hunter_db:
+                    h = hunter_db[aid]
+                    uname = f" {h['username']}" if h.get("username") else ""
+                    admin_text += f"🔹 {h['name']}{uname} (`{aid}`)\n"
+                else:
+                    admin_text += f"🔹 Unknown Hunter (`{aid}`)\n"
+        await query.message.reply_text(admin_text, parse_mode="Markdown")
 
 # ------------- AI & WELCOME & CORE TEXT HANDLER -------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -528,7 +540,6 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except: member_count = "New"
 
     for member in update.message.new_chat_members:
-        seen_members[chat_id][member.id] = {"name": _display_name(member), "is_bot": member.is_bot}
         if not member.is_bot:
             username = f"@{member.username}" if member.username else "No Username"
             final_msg = random.choice(WELCOME_MESSAGES).format(name=_display_name(member)) + f"\n🆔 UserID: {member.id}\n👤 Username: {username}\n📜 Bio: System Hidden"
@@ -564,16 +575,23 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try: await update.message.reply_text("Ugh, mera network thoda slow chal raha hai abhi. 🥺💔")
     except: pass
 
+# -------------- COUPLE FIX (DATABASE FETCH) --------------
 async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id, sender = update.effective_chat.id, update.effective_user
-    seen_members[chat_id][sender.id] = {"name": _display_name(sender), "is_bot": getattr(sender, "is_bot", False)}
+    chat_id = update.effective_chat.id
     today_str = str(date.today())
+    
+    # Check if couple already generated today
     if couples_db.get(chat_id, {}).get("date") == today_str:
         (id1, name1), (id2, name2) = couples_db[chat_id]["pair"]
         return await update.message.reply_text(f"💞 Couple of the Day:\n{mention_html(id1, name1)} + {mention_html(id2, name2)}", parse_mode="HTML")
 
-    pool = [(uid, info["name"]) for uid, info in seen_members[chat_id].items() if not info.get("is_bot", False)]
-    if len(pool) < 2: return await update.message.reply_text("Not enough active members yet! ❤️")
+    # Fetching active users directly from DB tracking (no more RAM clear issue)
+    members = chat_members_db.get(chat_id, set())
+    pool = [(uid, hunter_db[uid]["name"]) for uid in members if uid in hunter_db]
+    
+    if len(pool) < 2: 
+        return await update.message.reply_text("Not enough active members yet! (Thode aur logo ko ek message karne do pehle) ❤️")
+        
     picked = random.sample(pool, 2)
     couples_db[chat_id] = {"date": today_str, "pair": picked}
     await update.message.reply_text(f"💘 *Couple of the Day* 💘\n{mention_html(picked[0][0], picked[0][1])} + {mention_html(picked[1][0], picked[1][1])}", parse_mode="HTML")
@@ -587,7 +605,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         hunter_db[user.id]["exp"] += 1 
         if hunter_db[user.id]["exp"] % 5 == 0: save_hunter(user.id) # DB Save
 
-    if user.id == OWNER_ID:
+    if user.id in admins_db:
         if context.user_data.pop("awaiting_broadcast", None):
             success = 0
             for cid in list(known_groups.keys()):
@@ -597,15 +615,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except: pass
             return await update.message.reply_text(f"✅ Broadcast sent to {success} groups!")
             
-        if context.user_data.pop("awaiting_add_admin", None):
-            try: admins_db.add(int(update.message.text.strip())); save_admins(); await update.message.reply_text("✅ Admin added.")
-            except: await update.message.reply_text("❌ Invalid ID.")
-            return
-        if context.user_data.pop("awaiting_remove_admin", None):
-            try: 
-                if int(update.message.text.strip()) != OWNER_ID: admins_db.discard(int(update.message.text.strip())); save_admins(); await update.message.reply_text("✅ Removed.")
-            except: await update.message.reply_text("❌ Invalid ID.")
-            return
+        if user.id == OWNER_ID:
+            if context.user_data.pop("awaiting_add_admin", None):
+                try: admins_db.add(int(update.message.text.strip())); save_admins(); await update.message.reply_text("✅ Admin added.")
+                except: await update.message.reply_text("❌ Invalid ID.")
+                return
+            if context.user_data.pop("awaiting_remove_admin", None):
+                try: 
+                    if int(update.message.text.strip()) != OWNER_ID: admins_db.discard(int(update.message.text.strip())); save_admins(); await update.message.reply_text("✅ Removed.")
+                except: await update.message.reply_text("❌ Invalid ID.")
+                return
 
     if not await check_rights(update, "warn"):
         now = time.time()
@@ -674,7 +693,6 @@ def main():
     application.add_handler(CommandHandler("couple", couple_command))
 
     application.add_handler(CommandHandler("purge", purge))
-    application.add_handler(CommandHandler("purgeall", purge_all_user))
     application.add_handler(CommandHandler("purgegroup", purge_group))
     
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
