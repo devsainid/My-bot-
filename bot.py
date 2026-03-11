@@ -62,8 +62,6 @@ WELCOME_MESSAGES = [
     "Welcome, {name}! Make yourself at home 💖"
 ]
 
-# Fallback welcome image logic delete kar diya gaya hai. STRICTLY DYNAMIC Card logic applied.
-
 # Background for Welcome Card - Selected Option 2 (Starry Night)
 WELCOME_BG_URL = "https://images.unsplash.com/photo-1519608487953-e999c86e7455?w=1200"
 
@@ -162,7 +160,6 @@ async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             await update.message.reply_text(f"🔇 Muted {target_id}.")
         elif action == "unmute":
-            # FIXED CheckPermissions parameter from previous update
             await context.bot.restrict_chat_member(
                 chat_id, target_id,
                 permissions=ChatPermissions(
@@ -190,7 +187,6 @@ async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.unpin_chat_message(chat_id)
             await update.message.reply_text("✅ Unpinned.")
         elif action == "promote":
-            # FIXED promote logic parameter from previous update
             await context.bot.promote_chat_member(
                 chat_id, target_id, can_manage_chat=True, can_delete_messages=True,
                 can_manage_video_chats=True, can_restrict_members=True,
@@ -478,26 +474,20 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
     for member in update.message.new_chat_members:
         seen_members[chat_id][member.id] = {"name": _display_name(member), "is_bot": member.is_bot}
         if not member.is_bot:
-            # FIXED UserDetails Formatting for caption
             username = f"@{member.username}" if member.username else "No Username"
             userDetails = f"\n🆔 UserID: {member.id}\n👤 Username: {username}\n📜 Bio: Bio not accessible to bot in groups"
             
-            # Combine random message with fixed details caption
             base_msg = random.choice(WELCOME_MESSAGES).format(name=_display_name(member))
             final_msg = f"{base_msg}{userDetails}"
             
-            # 🌟 STRICTLY DYNAMIC WELCOME CARD GENERATION 🌟
             try:
-                # Encode data for URL parameters safely
                 safe_name = urllib.parse.quote(_display_name(member))
                 safe_chat = urllib.parse.quote(chat.title or "Our Group")
-                # Dynamic Replacement Texts Formatting
                 safe_member_count = urllib.parse.quote(f"Member #{member_count}")
                 safe_dynamic_details = urllib.parse.quote(f"UserID: {member.id}\nUsername: {username}\nBio: Bot can't access bio in groups")
 
-                # Attempt to get user DP for card avatar
                 photos = await context.bot.get_user_profile_photos(member.id, limit=1)
-                avatar_url = "https://i.ibb.co/4pDNDk1/avatar.png" # Default DP if none
+                avatar_url = "https://i.ibb.co/4pDNDk1/avatar.png" 
                 
                 if photos.total_count > 0:
                     file_id = photos.photos[0][-1].file_id
@@ -505,19 +495,14 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     avatar_url = file_info.file_path
                 safe_avatar = urllib.parse.quote(avatar_url)
 
-                # Encode other details
                 safe_bg = urllib.parse.quote(WELCOME_BG_URL)
 
-                # Popcat API for Welcome Image integrating all required dynamic fields properly formatted
-                # strict interpretation: put name in text1, chat title in text2, count in text3
                 card_url = f"https://api.popcat.xyz/welcomecard?background={safe_bg}&text1={safe_name}&text2=Welcome+to+{safe_chat}&text3={safe_member_count}&avatar={safe_avatar}"
                 
-                # strict interpretation: putting additional requested details (ID, Username, Bio) in caption final_msg
                 await context.bot.send_photo(chat_id=chat_id, photo=card_url, caption=final_msg)
             
             except Exception as e:
                 logging.error(f"Dynamic Welcome Card Error: {e}")
-                # 🛑 Automatic Fallback to original fallback deleted based on strict instructions. Code will try this once.
                 pass
 
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -530,7 +515,6 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
     system_prompt = "You are CINDRELLA, a bold, sassy, flirty, and smart Gen-Z girl. You are a Telegram group manager. Always reply in Hinglish or English. Keep your replies very short (1-2 lines), engaging, and playful. Never act like an AI, never break character."
 
-    # FIXED list of models from previous update
     models = [
         "meta-llama/llama-3.3-70b-instruct:free",
         "google/gemma-3-27b-it:free",
@@ -553,12 +537,18 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if res.status_code == 200:
                     reply = res.json()["choices"][0]["message"]["content"]
                     usage_count["count"] += 1
-                    return await update.message.reply_text(reply[:4096])
+                    try:
+                        return await update.message.reply_text(reply[:4096])
+                    except BadRequest:
+                        return await context.bot.send_message(chat_id=update.effective_chat.id, text=reply[:4096])
         except Exception as e:
             logging.error(f"Error with model {model}: {e}")
             continue
 
-    await update.message.reply_text("Ugh, mera network thoda slow chal raha hai abhi. 🥺💔")
+    try:
+        await update.message.reply_text("Ugh, mera network thoda slow chal raha hai abhi. 🥺💔")
+    except BadRequest:
+        pass
 
 async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -621,7 +611,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except: await update.message.reply_text("❌ Invalid ID.")
             return
 
-    # FIXED mentioned logic with username find update from previous context
     is_bot_mentioned_text = filters_db[chat_id].keys()
     bot_username_update = context.bot.username.lower() if context.bot.username else ""
     is_mentioned_in_handle_text = any(filters_db[chat_id].get(f) for f in is_bot_mentioned_text if f in msg_lower)
@@ -677,31 +666,23 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif mentioned or replied:
         await ai_reply(update, context)
 
-async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    register_sender(update)
-    # Basic logging/forwarding logic can remain here if needed, simplified for cleaner code
-    pass
-
 # ------------- MAIN -------------
 def main():
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Basic
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("admin", admin_panel))
     application.add_handler(CallbackQueryHandler(admin_button_handler))
     application.add_handler(CommandHandler("commands", commands_list))
 
-    # Moderation
-    for cmd in ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote"]:
-        application.add_handler(CommandHandler(cmd, partial(mod_action, action=cmd)))
+    # FIX: Grouped moderation commands directly
+    mod_cmds = ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote"]
+    application.add_handler(CommandHandler(mod_cmds, mod_action))
 
-    # Purge
     application.add_handler(CommandHandler("purge", purge))
     application.add_handler(CommandHandler("purgeall", purge_all_user))
     application.add_handler(CommandHandler("purgegroup", purge_group))
     
-    # Pro Features
     application.add_handler(CommandHandler("warn", warn_user))
     application.add_handler(CommandHandler("unwarn", unwarn_user))
     application.add_handler(CommandHandler("setrules", set_rules))
@@ -713,15 +694,11 @@ def main():
     application.add_handler(CommandHandler("rmfilter", rm_filter))
     application.add_handler(CommandHandler("afk", set_afk))
     application.add_handler(CommandHandler("anime", get_anime))
-
-    # Fun
     application.add_handler(CommandHandler("couple", couple_command))
 
-    # Handlers
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    # Job Queue
     if application.job_queue:
         ist = ZoneInfo("Asia/Kolkata")
         application.job_queue.run_daily(couple_daily_reset, time=dt_time(hour=1, minute=0, tzinfo=ist))
