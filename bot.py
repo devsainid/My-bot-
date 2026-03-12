@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Supreme AI + Random Dungeons + PvP + Shop + Shadows)
+# bot.py - CINDRELLA final (Supreme AI + Random Dungeons + PvP + Shop + Shadows + Top Hunter Fixed)
 import os
 import logging
 import json
@@ -329,6 +329,32 @@ async def give_exp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_hunter(sender.id); save_hunter(target.id)
     
     await update.message.reply_text(f"💸 <b>EXP Transferred!</b>\n\n<b>{str(sender_data['name']).replace('<','&lt;')}</b> gave <b>{amount} EXP</b> to <b>{str(target_data['name']).replace('<','&lt;')}</b> ⚡", parse_mode="HTML")
+
+# --- RESTORED: TOP HUNTER FUNCTIONS ---
+async def top_hunter_local(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ensure_user_registered(update)
+    chat_id = update.effective_chat.id
+    members = chat_members_db.get(chat_id, set())
+    sorted_hunters = sorted([uid for uid in members if uid in hunter_db], key=lambda x: hunter_db[x]["exp"], reverse=True)[:10]
+    if not sorted_hunters: return await update.message.reply_text("No active hunters in this guild.")
+        
+    text = "🏆 <b>TOP 10 GUILD HUNTERS</b> 🏆\n\n"
+    for i, uid in enumerate(sorted_hunters, 1):
+        h = hunter_db[uid]
+        level, rank = get_hunter_stats(h["exp"], uid)
+        text += f"<b>{i}.</b> {str(h['name']).replace('<','&lt;')}{' '+h.get('username') if h.get('username') else ''} - Lvl {level} ({rank})\n"
+    await update.message.reply_text(text, parse_mode="HTML")
+
+async def world_top_global(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ensure_user_registered(update)
+    sorted_hunters = sorted(hunter_db.items(), key=lambda x: x[1]["exp"], reverse=True)[:10]
+    if not sorted_hunters: return await update.message.reply_text("The world is empty. No hunters found.")
+        
+    text = "🌍 <b>WORLD TOP 10 S-RANK HUNTERS</b> 🌍\n\n"
+    for i, (uid, h) in enumerate(sorted_hunters, 1):
+        level, rank = get_hunter_stats(h["exp"], uid)
+        text += f"<b>{i}.</b> {str(h['name']).replace('<','&lt;')}{' '+h.get('username') if h.get('username') else ''} - Lvl {level} ({rank})\n"
+    await update.message.reply_text(text, parse_mode="HTML")
 
 # ------------- PVP SYSTEM -------------
 async def pvp_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1018,8 +1044,11 @@ def main():
     application.add_handler(CommandHandler("hunt", hunt))
     application.add_handler(CommandHandler("daily", daily_quest))
     application.add_handler(CommandHandler("give", give_exp))
+    
+    # YE RAHA WAPAS AAYA HUA TOP HUNTER
     application.add_handler(CommandHandler("top_hunter", top_hunter_local))
     application.add_handler(CommandHandler("world_top", world_top_global))
+    
     application.add_handler(CommandHandler("pvp", pvp_request))
     application.add_handler(CommandHandler("shop", shop_menu))
     application.add_handler(CommandHandler("arise", arise_shadow))
