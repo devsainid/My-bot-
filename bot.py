@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Supreme AI + Random Dungeons + PvP + Shop + Shadows + Top Hunter Fixed)
+# bot.py - CINDRELLA final (Owner Max Fix + Interactive Give Menu)
 import os
 import logging
 import json
@@ -172,13 +172,18 @@ def ensure_user_registered(update: Update):
     if user.id not in hunter_db:
         hunter_db[user.id] = {"name": _display_name(user), "username": username, "exp": 0, "last_hunt": 0, "last_daily": "", "crystals": 0, "streak": 0, "loot_boxes": 0, "shadows": [], "title": ""}
     
-    # Update missing keys for old users safely
+    # Update missing keys
     for key, val in [("crystals", 0), ("streak", 0), ("loot_boxes", 0), ("shadows", []), ("title", "")]:
         if key not in hunter_db[user.id]: hunter_db[user.id][key] = val
 
     hunter_db[user.id]["name"] = _display_name(user)
     hunter_db[user.id]["username"] = username
-    if user.id == OWNER_ID: hunter_db[user.id]["exp"] = 9999999
+    
+    # OWNER MAX STATS FIX
+    if user.id == OWNER_ID: 
+        hunter_db[user.id]["exp"] = 9999999
+        hunter_db[user.id]["crystals"] = 9999999
+        hunter_db[user.id]["loot_boxes"] = 9999
         
     if chat and chat.type in ["group", "supergroup"]:
         chat_members_db[chat.id].add(user.id)
@@ -202,9 +207,15 @@ async def hunter_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     target_user = update.message.reply_to_message.from_user if update.message.reply_to_message else update.effective_user
     username = f"@{target_user.username}" if target_user.username else ""
+    
+    # Init if looking at someone else
     if target_user.id not in hunter_db:
         hunter_db[target_user.id] = {"name": _display_name(target_user), "username": username, "exp": 0, "last_hunt": 0, "last_daily": "", "crystals": 0, "streak": 0, "loot_boxes": 0, "shadows": [], "title": ""}
-    if target_user.id == OWNER_ID: hunter_db[target_user.id]["exp"] = 9999999
+    
+    if target_user.id == OWNER_ID: 
+        hunter_db[target_user.id]["exp"] = 9999999
+        hunter_db[target_user.id]["crystals"] = 9999999
+        hunter_db[target_user.id]["loot_boxes"] = 9999
 
     data = hunter_db[target_user.id]
     level, rank = get_hunter_stats(data["exp"], target_user.id)
@@ -213,16 +224,21 @@ async def hunter_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     title_disp = f"\n👑 <b>Title:</b> {data['title']}" if data.get("title") else ""
     shadows_count = len(data.get("shadows", []))
     
+    # Display Infinity for Owner
+    exp_disp = data['exp'] if level != 'MAX' else '∞'
+    cryst_disp = data.get('crystals', 0) if level != 'MAX' else '∞'
+    loot_disp = data.get('loot_boxes', 0) if level != 'MAX' else '∞'
+    
     text = f"""🪪 <b>HUNTER LICENSE</b>
 
 👤 <b>Name:</b> {safe_name}{uname_display}{title_disp}
 🎖 <b>Rank:</b> {rank}
 📊 <b>Level:</b> {level}
-⚡ <b>EXP:</b> {data['exp'] if level != 'MAX' else '∞'}
-🔮 <b>Magic Crystals:</b> {data.get('crystals', 0)}
+⚡ <b>EXP:</b> {exp_disp}
+🔮 <b>Magic Crystals:</b> {cryst_disp}
 👥 <b>Shadow Soldiers:</b> {shadows_count}
 🔥 <b>Daily Streak:</b> {data.get('streak', 0)} Days
-🧰 <b>Loot Boxes:</b> {data.get('loot_boxes', 0)}"""
+🧰 <b>Loot Boxes:</b> {loot_disp}"""
 
     await update.message.reply_text(text, parse_mode="HTML")
 
@@ -236,7 +252,6 @@ async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text(f"⏳ Dungeon portal closed! Wait {m}m {s}s to hunt again. (Use /shop to buy a Dungeon Key!)")
     
     data["last_hunt"] = now
-    # Shadows give extra bonus
     shadow_bonus = len(data.get("shadows", [])) * 5
 
     events = [
@@ -293,9 +308,12 @@ async def open_loot_box(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     data = hunter_db[user.id]
     
-    if data.get("loot_boxes", 0) <= 0: return await update.message.reply_text("❌ You don't have any S-Rank Loot Boxes. Complete a 7-day /daily streak to get one!")
+    if data.get("loot_boxes", 0) <= 0 and user.id != OWNER_ID: 
+        return await update.message.reply_text("❌ You don't have any S-Rank Loot Boxes. Complete a 7-day /daily streak to get one!")
         
-    data["loot_boxes"] -= 1
+    if user.id != OWNER_ID:
+        data["loot_boxes"] -= 1
+        
     exp_win = random.randint(500, 2000)
     cryst_win = random.randint(50, 200)
     
@@ -306,29 +324,48 @@ async def open_loot_box(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(f"🧰 <b>Opening S-Rank Loot Box...</b>\n\n✨ <b>JACKPOT!</b> ✨\nYou found <b>{exp_win} EXP</b> and <b>{cryst_win} Magic Crystals</b> 🔮!", parse_mode="HTML")
 
-async def give_exp(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# --- NEW: INTERACTIVE GIVE COMMAND ---
+async def give_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     sender = update.effective_user
-    if not update.message.reply_to_message: return await update.message.reply_text("❌ Jisko EXP dena hai, uske message ka reply karke `/give <amount>` likho.")
-    target = update.message.reply_to_message.from_user
-    if sender.id == target.id: return await update.message.reply_text("❌ Khud ko EXP nahi de sakte!")
-    if not context.args or not context.args[0].isdigit(): return await update.message.reply_text("❌ Sahi format: `/give <amount>`")
-        
-    amount = int(context.args[0])
-    if amount <= 0: return await update.message.reply_text("❌ Amount 0 se zyada hona chahiye.")
-        
-    if target.id not in hunter_db:
-        hunter_db[target.id] = {"name": _display_name(target), "username": f"@{target.username}" if target.username else "", "exp": 0, "last_hunt": 0, "last_daily": "", "crystals": 0, "streak": 0, "loot_boxes": 0, "shadows": [], "title": ""}
-        
-    sender_data, target_data = hunter_db[sender.id], hunter_db[target.id]
-    if sender.id != OWNER_ID:
-        if sender_data["exp"] < amount: return await update.message.reply_text(f"❌ Tumhare paas itni EXP nahi hai! (Current: {sender_data['exp']})")
-        sender_data["exp"] -= amount
-        
-    target_data["exp"] += amount
-    save_hunter(sender.id); save_hunter(target.id)
     
-    await update.message.reply_text(f"💸 <b>EXP Transferred!</b>\n\n<b>{str(sender_data['name']).replace('<','&lt;')}</b> gave <b>{amount} EXP</b> to <b>{str(target_data['name']).replace('<','&lt;')}</b> ⚡", parse_mode="HTML")
+    if not update.message.reply_to_message: 
+        return await update.message.reply_text("❌ Reply to a Hunter's message and type `/give` to send items.")
+    target = update.message.reply_to_message.from_user
+    if sender.id == target.id: 
+        return await update.message.reply_text("❌ You cannot give items to yourself!")
+        
+    context.user_data["give_target_id"] = target.id
+    context.user_data["give_target_name"] = _display_name(target)
+    
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⚡ Give EXP", callback_data="give_exp"), InlineKeyboardButton("🔮 Give Crystals", callback_data="give_crystals")],
+        [InlineKeyboardButton("🧰 Give Loot Box", callback_data="give_lootbox")],
+        [InlineKeyboardButton("❌ Cancel", callback_data="give_cancel")]
+    ])
+    await update.message.reply_text(f"🎁 What would you like to give to **{_display_name(target)}**?", parse_mode="Markdown", reply_markup=markup)
+
+async def give_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    action = query.data.split("_")[1]
+    
+    if action == "cancel":
+        context.user_data.pop("give_target_id", None)
+        context.user_data.pop("give_item", None)
+        context.user_data.pop("awaiting_give_amount", None)
+        return await query.edit_message_text("❌ Transaction Cancelled.")
+        
+    target_id = context.user_data.get("give_target_id")
+    if not target_id:
+        return await query.answer("Session expired. Try /give again.", show_alert=True)
+        
+    item_names = {"exp": "EXP ⚡", "crystals": "Magic Crystals 🔮", "lootbox": "S-Rank Loot Boxes 🧰"}
+    context.user_data["give_item"] = action
+    context.user_data["awaiting_give_amount"] = True
+    
+    target_name = context.user_data.get("give_target_name", "Hunter")
+    await query.edit_message_text(f"🔢 How much **{item_names[action]}** do you want to give to {target_name}?\n\n*Type the number in the chat now:*", parse_mode="Markdown")
 
 # --- RESTORED: TOP HUNTER FUNCTIONS ---
 async def top_hunter_local(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -436,7 +473,7 @@ async def shop_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🗝️ Dungeon Key (100 🔮) - Reset /hunt cooldown", callback_data="shop_key")],
         [InlineKeyboardButton("👑 Custom Title (500 🔮) - Add profile title", callback_data="shop_title")]
     ])
-    await update.message.reply_text(f"🛒 **SYSTEM SHOP** 🛒\n\n🔮 **Your Magic Crystals:** {cryst}\n\nBuy items to aid your journey:", reply_markup=markup)
+    await update.message.reply_text(f"🛒 **SYSTEM SHOP** 🛒\n\n🔮 **Your Magic Crystals:** {cryst if user.id != OWNER_ID else '∞'}\n\nBuy items to aid your journey:", reply_markup=markup)
 
 async def shop_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -448,23 +485,23 @@ async def shop_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     cryst = data.get("crystals", 0)
     
     if action == "heal":
-        if cryst < 50: return await query.answer("Not enough crystals!", show_alert=True)
+        if cryst < 50 and user_id != OWNER_ID: return await query.answer("Not enough crystals!", show_alert=True)
         if warnings_db[chat_id][user_id] <= 0: return await query.answer("You have 0 warnings, no need to heal!", show_alert=True)
-        data["crystals"] -= 50
+        if user_id != OWNER_ID: data["crystals"] -= 50
         warnings_db[chat_id][user_id] -= 1
         save_hunter(user_id)
         await query.answer("Purchased Healing Potion! 1 Warning removed.", show_alert=True)
         
     elif action == "key":
-        if cryst < 100: return await query.answer("Not enough crystals!", show_alert=True)
-        data["crystals"] -= 100
+        if cryst < 100 and user_id != OWNER_ID: return await query.answer("Not enough crystals!", show_alert=True)
+        if user_id != OWNER_ID: data["crystals"] -= 100
         data["last_hunt"] = 0
         save_hunter(user_id)
         await query.answer("Purchased Dungeon Key! You can /hunt again right now.", show_alert=True)
         
     elif action == "title":
-        if cryst < 500: return await query.answer("Not enough crystals!", show_alert=True)
-        data["crystals"] -= 500
+        if cryst < 500 and user_id != OWNER_ID: return await query.answer("Not enough crystals!", show_alert=True)
+        if user_id != OWNER_ID: data["crystals"] -= 500
         titles = ["Shadow Monarch", "S-Rank Elite", "Guild Master's Right Hand", "Demon King", "Dragon Slayer"]
         new_title = random.choice(titles)
         data["title"] = new_title
@@ -550,7 +587,6 @@ async def arise_shadow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if time.time() - target["time"] > 30:
         return await update.message.reply_text("❌ You took too long. The shadow faded into the abyss.")
         
-    # 50% Chance
     if random.choice([True, False]):
         hunter_db[user_id]["shadows"].append(target["boss"])
         save_hunter(user_id)
@@ -715,7 +751,7 @@ async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 `/stats [reply]` - Check Hunter License & Items
 `/hunt` - Enter Dungeon & Kill Monsters
 `/daily` - Daily Quest, Streak & Loot Box
-`/give <reply> <amount>` - Donate EXP
+`/give <reply>` - Donate EXP, Crystals, Loot Box
 `/pvp <reply> <amount>` - Duel a Hunter for EXP
 `/shop` - Buy Potions, Keys & Titles
 `/arise` - Extract Shadow (After Boss Kill)
@@ -956,6 +992,46 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     ensure_user_registered(update)
     
+    # --- NEW: GIVE AMOUNT CATCHER ---
+    if context.user_data.get("awaiting_give_amount"):
+        amount_str = update.message.text.strip()
+        if amount_str.isdigit() and int(amount_str) > 0:
+            amount = int(amount_str)
+            item_type = context.user_data["give_item"]
+            target_id = context.user_data["give_target_id"]
+            target_name = context.user_data["give_target_name"]
+            
+            sender_data = hunter_db[user.id]
+            if target_id not in hunter_db:
+                hunter_db[target_id] = {"name": target_name, "username": "", "exp": 0, "last_hunt": 0, "last_daily": "", "crystals": 0, "streak": 0, "loot_boxes": 0, "shadows": [], "title": ""}
+            target_data = hunter_db[target_id]
+            
+            db_keys = {"exp": "exp", "crystals": "crystals", "lootbox": "loot_boxes"}
+            db_key = db_keys[item_type]
+            item_names = {"exp": "EXP ⚡", "crystals": "Magic Crystals 🔮", "lootbox": "S-Rank Loot Boxes 🧰"}
+            
+            if user.id != OWNER_ID:
+                if sender_data.get(db_key, 0) < amount:
+                    context.user_data.pop("awaiting_give_amount", None)
+                    return await update.message.reply_text(f"❌ Tumhare paas itne {item_names[item_type]} nahi hain!")
+                sender_data[db_key] -= amount
+                
+            target_data[db_key] += amount
+            save_hunter(user.id)
+            save_hunter(target_id)
+            
+            context.user_data.pop("awaiting_give_amount", None)
+            context.user_data.pop("give_target_id", None)
+            context.user_data.pop("give_item", None)
+            
+            return await update.message.reply_text(f"✅ **SUCCESS!**\n\nYou gave **{amount} {item_names[item_type]}** to {target_name}!", parse_mode="Markdown")
+        else:
+            context.user_data.pop("awaiting_give_amount", None)
+            context.user_data.pop("give_target_id", None)
+            context.user_data.pop("give_item", None)
+            return await update.message.reply_text("❌ Invalid amount. Transaction cancelled.")
+    
+    # DUNGEON TYPING MECHANIC
     if chat_id in active_dungeons and active_dungeons[chat_id]["type"] == 2:
         if update.message.reply_to_message and update.message.reply_to_message.message_id == active_dungeons[chat_id]["msg_id"]:
             if msg_lower == active_dungeons[chat_id]["word"].lower():
@@ -963,6 +1039,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await clear_dungeon(update, context, chat_id, active_dungeons[chat_id]["participants"], user.id)
                 return 
 
+    # DUNGEON TRIGGER COUNTER
     if update.effective_chat.type in ["group", "supergroup"]:
         group_msg_counts[chat_id] += 1
         if group_msg_counts[chat_id] >= 30:
@@ -1038,14 +1115,17 @@ def main():
     application.add_handler(CallbackQueryHandler(dungeon_button_handler, pattern="^dungeon_"))
     application.add_handler(CallbackQueryHandler(pvp_button_handler, pattern="^pvp_"))
     application.add_handler(CallbackQueryHandler(shop_button_handler, pattern="^shop_"))
+    # NEW: GIVE COMMAND CALLBACKS
+    application.add_handler(CallbackQueryHandler(give_button_handler, pattern="^give_"))
     
     application.add_handler(CommandHandler("commands", commands_list))
     application.add_handler(CommandHandler("stats", hunter_profile))
     application.add_handler(CommandHandler("hunt", hunt))
     application.add_handler(CommandHandler("daily", daily_quest))
-    application.add_handler(CommandHandler("give", give_exp))
     
-    # YE RAHA WAPAS AAYA HUA TOP HUNTER
+    # NEW: GIVE COMMAND
+    application.add_handler(CommandHandler("give", give_menu))
+    
     application.add_handler(CommandHandler("top_hunter", top_hunter_local))
     application.add_handler(CommandHandler("world_top", world_top_global))
     
