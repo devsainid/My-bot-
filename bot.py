@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Owner Max Fix + Interactive Give Menu)
+# bot.py - CINDRELLA final (Universal Broadcast + 5 EXP/msg + Smart AI)
 import os
 import logging
 import json
@@ -58,7 +58,7 @@ hunter_db = {}
 # --- DUNGEON SYSTEM STATE ---
 group_msg_counts = defaultdict(int)
 active_dungeons = {}
-arise_targets = {} # For shadow extraction
+arise_targets = {} 
 
 DUNGEON_RANKS = {
     "E": {"video": "https://files.catbox.moe/ne4vk6.mp4", "reward": 50, "crystals": 5, "penalty": 10, "hp": 100, "name": "Goblin Outpost"},
@@ -70,8 +70,6 @@ DUNGEON_RANKS = {
     "RED": {"video": "https://files.catbox.moe/8dxlw3.mp4", "reward": 1500, "crystals": 300, "penalty": 400, "hp": 3000, "name": "Blood-Red Igris"}
 }
 DUNGEON_WORDS = ["ARISE", "SMASH", "KILL", "WAKE UP", "FIGHT", "DEFEND"]
-
-# --- PVP STATE ---
 active_pvps = {}
 
 WELCOME_MESSAGES = [
@@ -172,14 +170,12 @@ def ensure_user_registered(update: Update):
     if user.id not in hunter_db:
         hunter_db[user.id] = {"name": _display_name(user), "username": username, "exp": 0, "last_hunt": 0, "last_daily": "", "crystals": 0, "streak": 0, "loot_boxes": 0, "shadows": [], "title": ""}
     
-    # Update missing keys
     for key, val in [("crystals", 0), ("streak", 0), ("loot_boxes", 0), ("shadows", []), ("title", "")]:
         if key not in hunter_db[user.id]: hunter_db[user.id][key] = val
 
     hunter_db[user.id]["name"] = _display_name(user)
     hunter_db[user.id]["username"] = username
     
-    # OWNER MAX STATS FIX
     if user.id == OWNER_ID: 
         hunter_db[user.id]["exp"] = 9999999
         hunter_db[user.id]["crystals"] = 9999999
@@ -208,7 +204,6 @@ async def hunter_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target_user = update.message.reply_to_message.from_user if update.message.reply_to_message else update.effective_user
     username = f"@{target_user.username}" if target_user.username else ""
     
-    # Init if looking at someone else
     if target_user.id not in hunter_db:
         hunter_db[target_user.id] = {"name": _display_name(target_user), "username": username, "exp": 0, "last_hunt": 0, "last_daily": "", "crystals": 0, "streak": 0, "loot_boxes": 0, "shadows": [], "title": ""}
     
@@ -224,7 +219,6 @@ async def hunter_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     title_disp = f"\n👑 <b>Title:</b> {data['title']}" if data.get("title") else ""
     shadows_count = len(data.get("shadows", []))
     
-    # Display Infinity for Owner
     exp_disp = data['exp'] if level != 'MAX' else '∞'
     cryst_disp = data.get('crystals', 0) if level != 'MAX' else '∞'
     loot_disp = data.get('loot_boxes', 0) if level != 'MAX' else '∞'
@@ -324,7 +318,6 @@ async def open_loot_box(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(f"🧰 <b>Opening S-Rank Loot Box...</b>\n\n✨ <b>JACKPOT!</b> ✨\nYou found <b>{exp_win} EXP</b> and <b>{cryst_win} Magic Crystals</b> 🔮!", parse_mode="HTML")
 
-# --- NEW: INTERACTIVE GIVE COMMAND ---
 async def give_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     sender = update.effective_user
@@ -367,7 +360,6 @@ async def give_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     target_name = context.user_data.get("give_target_name", "Hunter")
     await query.edit_message_text(f"🔢 How much **{item_names[action]}** do you want to give to {target_name}?\n\n*Type the number in the chat now:*", parse_mode="Markdown")
 
-# --- RESTORED: TOP HUNTER FUNCTIONS ---
 async def top_hunter_local(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     chat_id = update.effective_chat.id
@@ -925,7 +917,7 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 # ------------- AI & WELCOME -------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
-    await update.message.reply_text("Hey, I'm CINDRELLA 🌹—your Supreme System AI & Guild Manager!\nType /commands to see what I can do!", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text("Hey, I'm CINDRELLA 🌹—your AI Assistant!\nType /commands to see what I can do!", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id, chat = update.effective_chat.id, update.effective_chat
@@ -951,7 +943,10 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
-    system_prompt = "You are CINDRELLA, an exceptionally smart, friendly, and highly intelligent AI assistant. Your primary goal is to provide accurate, engaging, and helpful answers. CRITICAL RULE: You must strictly reply in the exact same language the user uses. If they type in English, reply in English. If they type in Hindi script, reply in Hindi. If they type in Hinglish (Hindi written in English alphabet), reply in Hinglish. keep use same language as user replying.Keep your responses concise (1-3 lines), natural, and conversational. Do not act like a robotic AI; be a great, smart conversationalist."
+    
+    # NEW NATURAL AI PROMPT
+    system_prompt = "You are CINDRELLA, an exceptionally smart, friendly, and highly intelligent AI assistant. Your primary goal is to provide accurate, engaging, and helpful answers. CRITICAL RULE: You must strictly reply in the exact same language the user uses. If they type in English, reply in English. If they type in Hindi script, reply in Hindi. If they type in Hinglish (Hindi written in English alphabet), reply in Hinglish. Keep your responses concise (1-3 lines), natural, and conversational. Do not act like a robotic AI; be a great, smart conversationalist."
+    
     models = ["meta-llama/llama-3.3-70b-instruct:free", "google/gemma-3-27b-it:free", "nvidia/nemotron-3-nano-30b-a3b:free", "stepfun/step-3.5-flash:free", "arcee-ai/trinity-large-preview:free"]
     
     for model in models:
@@ -965,7 +960,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     try: return await update.message.reply_text(reply[:4096])
                     except BadRequest: return await context.bot.send_message(chat_id=update.effective_chat.id, text=reply[:4096])
         except: continue
-    try: await update.message.reply_text("System processing error. Try again later, Hunter.")
+    try: await update.message.reply_text("System processing error. Try again later.")
     except: pass
 
 async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -992,7 +987,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     ensure_user_registered(update)
     
-    # --- NEW: GIVE AMOUNT CATCHER ---
+    # --- GIVE AMOUNT CATCHER ---
     if context.user_data.get("awaiting_give_amount"):
         amount_str = update.message.text.strip()
         if amount_str.isdigit() and int(amount_str) > 0:
@@ -1047,19 +1042,34 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if chat_id not in active_dungeons:
                 asyncio.create_task(spawn_dungeon(update, context, chat_id))
 
+    # --- NEW: SECRET +5 EXP EVERY MESSAGE ---
     if user.id != OWNER_ID:
-        hunter_db[user.id]["exp"] += 1 
-        if hunter_db[user.id]["exp"] % 5 == 0: save_hunter(user.id)
+        hunter_db[user.id]["exp"] += 5 
+        # Optimize DB saving to prevent lag
+        if (hunter_db[user.id]["exp"] // 5) % 5 == 0: 
+            save_hunter(user.id)
 
+    # --- UNIVERSAL BROADCAST (DMs + GROUPS) ---
     if user.id in admins_db:
         if context.user_data.pop("awaiting_broadcast", None):
-            success = 0
+            success_groups = 0
             for cid in list(known_groups.keys()):
                 try: 
                     await context.bot.send_message(cid, f"📢 **Broadcast Message:**\n\n{update.message.text}", parse_mode="Markdown")
-                    success += 1
+                    success_groups += 1
+                    await asyncio.sleep(0.05)
                 except: pass
-            return await update.message.reply_text(f"✅ Broadcast sent to {success} groups!")
+            
+            success_users = 0
+            for uid in list(hunter_db.keys()):
+                try:
+                    # Ignore sending to groups again since hunter_db only stores users
+                    await context.bot.send_message(uid, f"📢 **System Broadcast:**\n\n{update.message.text}", parse_mode="Markdown")
+                    success_users += 1
+                    await asyncio.sleep(0.05)
+                except: pass
+                
+            return await update.message.reply_text(f"✅ Broadcast successfully sent to **{success_groups} Groups** and **{success_users} Users DMs**!")
             
         if user.id == OWNER_ID:
             if context.user_data.pop("awaiting_add_admin", None):
@@ -1115,15 +1125,12 @@ def main():
     application.add_handler(CallbackQueryHandler(dungeon_button_handler, pattern="^dungeon_"))
     application.add_handler(CallbackQueryHandler(pvp_button_handler, pattern="^pvp_"))
     application.add_handler(CallbackQueryHandler(shop_button_handler, pattern="^shop_"))
-    # NEW: GIVE COMMAND CALLBACKS
     application.add_handler(CallbackQueryHandler(give_button_handler, pattern="^give_"))
     
     application.add_handler(CommandHandler("commands", commands_list))
     application.add_handler(CommandHandler("stats", hunter_profile))
     application.add_handler(CommandHandler("hunt", hunt))
     application.add_handler(CommandHandler("daily", daily_quest))
-    
-    # NEW: GIVE COMMAND
     application.add_handler(CommandHandler("give", give_menu))
     
     application.add_handler(CommandHandler("top_hunter", top_hunter_local))
