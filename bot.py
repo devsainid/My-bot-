@@ -951,7 +951,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
-    system_prompt = "You are CINDRELLA, the Supreme System AI and Guild Manager of a National Level Hunter Guild. You are highly intelligent, slightly arrogant but deeply caring about your hunters, witty, and extremely loyal to the Guild Master. You talk like a high-end, powerful AI mixed with an anime boss lady. You use words related to gaming, leveling up, quests, and stats. Always reply in Hinglish or English. Keep replies short (1-2 lines), engaging, and badass. Never break character."
+    system_prompt = "You are CINDRELLA, an exceptionally smart, friendly, and highly intelligent AI assistant. Your primary goal is to provide accurate, engaging, and helpful answers. CRITICAL RULE: You must strictly reply in the exact same language the user uses. If they type in English, reply in English. If they type in Hindi script, reply in Hindi. If they type in Hinglish (Hindi written in English alphabet), reply in Hinglish. keep use same language as user replying.Keep your responses concise (1-3 lines), natural, and conversational. Do not act like a robotic AI; be a great, smart conversationalist."
     models = ["meta-llama/llama-3.3-70b-instruct:free", "google/gemma-3-27b-it:free", "nvidia/nemotron-3-nano-30b-a3b:free", "stepfun/step-3.5-flash:free", "arcee-ai/trinity-large-preview:free"]
     
     for model in models:
