@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Universal Broadcast + 5 EXP/msg + Smart AI)
+# bot.py - CINDRELLA final (Give Shadows + Shadow Names in Stats + Owner Max Shadows)
 import os
 import logging
 import json
@@ -60,13 +60,16 @@ group_msg_counts = defaultdict(int)
 active_dungeons = {}
 arise_targets = {} 
 
+# MASTER LIST OF ALL SHADOWS FOR OWNER
+ALL_SHADOWS = ["Goblin Chieftain", "Direwolf Alpha", "High Orc Kargal", "Assassin Kasaka", "Giant Iron Golem", "Tank", "Tusk", "Ant King Beru", "Blood-Red Igris", "Kamish", "Bellion"]
+
 DUNGEON_RANKS = {
-    "E": {"video": "https://files.catbox.moe/ne4vk6.mp4", "reward": 50, "crystals": 5, "penalty": 10, "hp": 100, "name": "Goblin Outpost"},
-    "D": {"video": "https://files.catbox.moe/ne4vk6.mp4", "reward": 80, "crystals": 10, "penalty": 20, "hp": 200, "name": "Direwolf Den"},
-    "C": {"video": "https://files.catbox.moe/nyvaoy.mp4", "reward": 150, "crystals": 20, "penalty": 40, "hp": 400, "name": "High Orc Lair"},
-    "B": {"video": "https://files.catbox.moe/nyvaoy.mp4", "reward": 250, "crystals": 40, "penalty": 60, "hp": 600, "name": "Assassin Guild"},
-    "A": {"video": "https://files.catbox.moe/k5doyt.mp4", "reward": 400, "crystals": 80, "penalty": 100, "hp": 1000, "name": "A-Class Boss Room"},
-    "S": {"video": "https://files.catbox.moe/k5doyt.mp4", "reward": 800, "crystals": 150, "penalty": 200, "hp": 2000, "name": "Ant King Nest"},
+    "E": {"video": "https://files.catbox.moe/ne4vk6.mp4", "reward": 50, "crystals": 5, "penalty": 10, "hp": 100, "name": "Goblin Chieftain"},
+    "D": {"video": "https://files.catbox.moe/ne4vk6.mp4", "reward": 80, "crystals": 10, "penalty": 20, "hp": 200, "name": "Direwolf Alpha"},
+    "C": {"video": "https://files.catbox.moe/nyvaoy.mp4", "reward": 150, "crystals": 20, "penalty": 40, "hp": 400, "name": "High Orc Kargal"},
+    "B": {"video": "https://files.catbox.moe/nyvaoy.mp4", "reward": 250, "crystals": 40, "penalty": 60, "hp": 600, "name": "Assassin Kasaka"},
+    "A": {"video": "https://files.catbox.moe/k5doyt.mp4", "reward": 400, "crystals": 80, "penalty": 100, "hp": 1000, "name": "Giant Iron Golem"},
+    "S": {"video": "https://files.catbox.moe/k5doyt.mp4", "reward": 800, "crystals": 150, "penalty": 200, "hp": 2000, "name": "Ant King Beru"},
     "RED": {"video": "https://files.catbox.moe/8dxlw3.mp4", "reward": 1500, "crystals": 300, "penalty": 400, "hp": 3000, "name": "Blood-Red Igris"}
 }
 DUNGEON_WORDS = ["ARISE", "SMASH", "KILL", "WAKE UP", "FIGHT", "DEFEND"]
@@ -176,10 +179,12 @@ def ensure_user_registered(update: Update):
     hunter_db[user.id]["name"] = _display_name(user)
     hunter_db[user.id]["username"] = username
     
+    # OWNER MAX STATS FIX WITH SHADOWS
     if user.id == OWNER_ID: 
         hunter_db[user.id]["exp"] = 9999999
         hunter_db[user.id]["crystals"] = 9999999
         hunter_db[user.id]["loot_boxes"] = 9999
+        hunter_db[user.id]["shadows"] = ALL_SHADOWS.copy()
         
     if chat and chat.type in ["group", "supergroup"]:
         chat_members_db[chat.id].add(user.id)
@@ -211,13 +216,17 @@ async def hunter_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         hunter_db[target_user.id]["exp"] = 9999999
         hunter_db[target_user.id]["crystals"] = 9999999
         hunter_db[target_user.id]["loot_boxes"] = 9999
+        hunter_db[target_user.id]["shadows"] = ALL_SHADOWS.copy()
 
     data = hunter_db[target_user.id]
     level, rank = get_hunter_stats(data["exp"], target_user.id)
     uname_display = f" ({data['username']})" if data['username'] else ""
     safe_name = str(data['name']).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     title_disp = f"\n👑 <b>Title:</b> {data['title']}" if data.get("title") else ""
-    shadows_count = len(data.get("shadows", []))
+    
+    shadow_list = data.get("shadows", [])
+    shadows_count = len(shadow_list)
+    shadow_names = ", ".join(set(shadow_list)) if shadows_count > 0 else "None"
     
     exp_disp = data['exp'] if level != 'MAX' else '∞'
     cryst_disp = data.get('crystals', 0) if level != 'MAX' else '∞'
@@ -230,7 +239,7 @@ async def hunter_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📊 <b>Level:</b> {level}
 ⚡ <b>EXP:</b> {exp_disp}
 🔮 <b>Magic Crystals:</b> {cryst_disp}
-👥 <b>Shadow Soldiers:</b> {shadows_count}
+👥 <b>Shadow Soldiers:</b> {shadows_count} <i>({shadow_names})</i>
 🔥 <b>Daily Streak:</b> {data.get('streak', 0)} Days
 🧰 <b>Loot Boxes:</b> {loot_disp}"""
 
@@ -318,6 +327,7 @@ async def open_loot_box(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(f"🧰 <b>Opening S-Rank Loot Box...</b>\n\n✨ <b>JACKPOT!</b> ✨\nYou found <b>{exp_win} EXP</b> and <b>{cryst_win} Magic Crystals</b> 🔮!", parse_mode="HTML")
 
+# --- INTERACTIVE GIVE COMMAND (WITH SHADOWS) ---
 async def give_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     sender = update.effective_user
@@ -333,7 +343,7 @@ async def give_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("⚡ Give EXP", callback_data="give_exp"), InlineKeyboardButton("🔮 Give Crystals", callback_data="give_crystals")],
-        [InlineKeyboardButton("🧰 Give Loot Box", callback_data="give_lootbox")],
+        [InlineKeyboardButton("🧰 Give Loot Box", callback_data="give_lootbox"), InlineKeyboardButton("👥 Give Shadow", callback_data="give_shadow")],
         [InlineKeyboardButton("❌ Cancel", callback_data="give_cancel")]
     ])
     await update.message.reply_text(f"🎁 What would you like to give to **{_display_name(target)}**?", parse_mode="Markdown", reply_markup=markup)
@@ -347,19 +357,33 @@ async def give_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data.pop("give_target_id", None)
         context.user_data.pop("give_item", None)
         context.user_data.pop("awaiting_give_amount", None)
+        context.user_data.pop("awaiting_give_shadow", None)
         return await query.edit_message_text("❌ Transaction Cancelled.")
         
     target_id = context.user_data.get("give_target_id")
     if not target_id:
         return await query.answer("Session expired. Try /give again.", show_alert=True)
         
+    target_name = context.user_data.get("give_target_name", "Hunter")
+    
+    if action == "shadow":
+        s_shadows = hunter_db[user_id].get("shadows", [])
+        if user_id == OWNER_ID: s_shadows = ALL_SHADOWS
+        
+        if not s_shadows:
+            return await query.answer("You don't have any Shadow Soldiers to give!", show_alert=True)
+            
+        shadow_list = "\n".join([f"🌑 `{s}`" for s in set(s_shadows)])
+        context.user_data["awaiting_give_shadow"] = True
+        return await query.edit_message_text(f"👥 **Your Shadow Soldiers:**\n{shadow_list}\n\n*Type the EXACT name of the Shadow you want to give to {target_name}:*", parse_mode="Markdown")
+
     item_names = {"exp": "EXP ⚡", "crystals": "Magic Crystals 🔮", "lootbox": "S-Rank Loot Boxes 🧰"}
     context.user_data["give_item"] = action
     context.user_data["awaiting_give_amount"] = True
     
-    target_name = context.user_data.get("give_target_name", "Hunter")
     await query.edit_message_text(f"🔢 How much **{item_names[action]}** do you want to give to {target_name}?\n\n*Type the number in the chat now:*", parse_mode="Markdown")
 
+# --- TOP HUNTER FUNCTIONS ---
 async def top_hunter_local(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     chat_id = update.effective_chat.id
@@ -743,7 +767,7 @@ async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 `/stats [reply]` - Check Hunter License & Items
 `/hunt` - Enter Dungeon & Kill Monsters
 `/daily` - Daily Quest, Streak & Loot Box
-`/give <reply>` - Donate EXP, Crystals, Loot Box
+`/give <reply>` - Donate EXP, Crystals, Loot Box, Shadows
 `/pvp <reply> <amount>` - Duel a Hunter for EXP
 `/shop` - Buy Potions, Keys & Titles
 `/arise` - Extract Shadow (After Boss Kill)
@@ -944,7 +968,6 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
     
-    # NEW NATURAL AI PROMPT
     system_prompt = "You are CINDRELLA, an exceptionally smart, friendly, and highly intelligent AI assistant. Your primary goal is to provide accurate, engaging, and helpful answers. CRITICAL RULE: You must strictly reply in the exact same language the user uses. If they type in English, reply in English. If they type in Hindi script, reply in Hindi. If they type in Hinglish (Hindi written in English alphabet), reply in Hinglish. Keep your responses concise (1-3 lines), natural, and conversational. Do not act like a robotic AI; be a great, smart conversationalist."
     
     models = ["meta-llama/llama-3.3-70b-instruct:free", "google/gemma-3-27b-it:free", "nvidia/nemotron-3-nano-30b-a3b:free", "stepfun/step-3.5-flash:free", "arcee-ai/trinity-large-preview:free"]
@@ -987,6 +1010,39 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     ensure_user_registered(update)
     
+    # --- GIVE SHADOW CATCHER ---
+    if context.user_data.get("awaiting_give_shadow"):
+        shadow_name = update.message.text.strip()
+        target_id = context.user_data["give_target_id"]
+        target_name = context.user_data["give_target_name"]
+        
+        sender_data = hunter_db[user.id]
+        if target_id not in hunter_db:
+            hunter_db[target_id] = {"name": target_name, "username": "", "exp": 0, "last_hunt": 0, "last_daily": "", "crystals": 0, "streak": 0, "loot_boxes": 0, "shadows": [], "title": ""}
+        target_data = hunter_db[target_id]
+        
+        s_shadows = sender_data.get("shadows", [])
+        if user.id == OWNER_ID: s_shadows = ALL_SHADOWS
+            
+        matched_shadow = next((s for s in s_shadows if s.lower() == shadow_name.lower()), None)
+        
+        if not matched_shadow:
+            context.user_data.pop("awaiting_give_shadow", None)
+            context.user_data.pop("give_target_id", None)
+            return await update.message.reply_text(f"❌ Tumhare paas '{shadow_name}' naam ka koi Shadow nahi hai. Transaction cancelled.")
+            
+        if user.id != OWNER_ID:
+            sender_data["shadows"].remove(matched_shadow)
+            
+        target_data["shadows"].append(matched_shadow)
+        save_hunter(user.id)
+        save_hunter(target_id)
+        
+        context.user_data.pop("awaiting_give_shadow", None)
+        context.user_data.pop("give_target_id", None)
+        
+        return await update.message.reply_text(f"✅ **SHADOW TRANSFERRED!**\n\n🌑 You gave **{matched_shadow}** to {target_name}!", parse_mode="Markdown")
+
     # --- GIVE AMOUNT CATCHER ---
     if context.user_data.get("awaiting_give_amount"):
         amount_str = update.message.text.strip()
@@ -1042,14 +1098,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if chat_id not in active_dungeons:
                 asyncio.create_task(spawn_dungeon(update, context, chat_id))
 
-    # --- NEW: SECRET +5 EXP EVERY MESSAGE ---
+    # SECRET +5 EXP EVERY MESSAGE
     if user.id != OWNER_ID:
         hunter_db[user.id]["exp"] += 5 
-        # Optimize DB saving to prevent lag
         if (hunter_db[user.id]["exp"] // 5) % 5 == 0: 
             save_hunter(user.id)
 
-    # --- UNIVERSAL BROADCAST (DMs + GROUPS) ---
+    # UNIVERSAL BROADCAST
     if user.id in admins_db:
         if context.user_data.pop("awaiting_broadcast", None):
             success_groups = 0
@@ -1063,7 +1118,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             success_users = 0
             for uid in list(hunter_db.keys()):
                 try:
-                    # Ignore sending to groups again since hunter_db only stores users
                     await context.bot.send_message(uid, f"📢 **System Broadcast:**\n\n{update.message.text}", parse_mode="Markdown")
                     success_users += 1
                     await asyncio.sleep(0.05)
