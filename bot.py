@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Supreme AI + Premium Random Dungeons + Safe Core)
+# bot.py - CINDRELLA final (Supreme AI + Random Dungeons + PvP + Shop + Shadows)
 import os
 import logging
 import json
@@ -58,17 +58,21 @@ hunter_db = {}
 # --- DUNGEON SYSTEM STATE ---
 group_msg_counts = defaultdict(int)
 active_dungeons = {}
+arise_targets = {} # For shadow extraction
 
 DUNGEON_RANKS = {
-    "E": {"video": "https://files.catbox.moe/ne4vk6.mp4", "reward": 50, "penalty": 10, "hp": 100, "name": "Goblin Outpost"},
-    "D": {"video": "https://files.catbox.moe/ne4vk6.mp4", "reward": 80, "penalty": 20, "hp": 200, "name": "Direwolf Den"},
-    "C": {"video": "https://files.catbox.moe/nyvaoy.mp4", "reward": 150, "penalty": 40, "hp": 400, "name": "High Orc Lair"},
-    "B": {"video": "https://files.catbox.moe/nyvaoy.mp4", "reward": 250, "penalty": 60, "hp": 600, "name": "Assassin Guild"},
-    "A": {"video": "https://files.catbox.moe/k5doyt.mp4", "reward": 400, "penalty": 100, "hp": 1000, "name": "A-Class Boss Room"},
-    "S": {"video": "https://files.catbox.moe/k5doyt.mp4", "reward": 800, "penalty": 200, "hp": 2000, "name": "Ant King Nest"},
-    "RED": {"video": "https://files.catbox.moe/8dxlw3.mp4", "reward": 1500, "penalty": 400, "hp": 3000, "name": "Blood-Red Igris"}
+    "E": {"video": "https://files.catbox.moe/ne4vk6.mp4", "reward": 50, "crystals": 5, "penalty": 10, "hp": 100, "name": "Goblin Outpost"},
+    "D": {"video": "https://files.catbox.moe/ne4vk6.mp4", "reward": 80, "crystals": 10, "penalty": 20, "hp": 200, "name": "Direwolf Den"},
+    "C": {"video": "https://files.catbox.moe/nyvaoy.mp4", "reward": 150, "crystals": 20, "penalty": 40, "hp": 400, "name": "High Orc Lair"},
+    "B": {"video": "https://files.catbox.moe/nyvaoy.mp4", "reward": 250, "crystals": 40, "penalty": 60, "hp": 600, "name": "Assassin Guild"},
+    "A": {"video": "https://files.catbox.moe/k5doyt.mp4", "reward": 400, "crystals": 80, "penalty": 100, "hp": 1000, "name": "A-Class Boss Room"},
+    "S": {"video": "https://files.catbox.moe/k5doyt.mp4", "reward": 800, "crystals": 150, "penalty": 200, "hp": 2000, "name": "Ant King Nest"},
+    "RED": {"video": "https://files.catbox.moe/8dxlw3.mp4", "reward": 1500, "crystals": 300, "penalty": 400, "hp": 3000, "name": "Blood-Red Igris"}
 }
 DUNGEON_WORDS = ["ARISE", "SMASH", "KILL", "WAKE UP", "FIGHT", "DEFEND"]
+
+# --- PVP STATE ---
+active_pvps = {}
 
 WELCOME_MESSAGES = [
     "Welcome {name}! ✨ Glad you're here — have fun!",
@@ -97,7 +101,12 @@ try:
                 "username": hnt.get("username", ""),
                 "exp": hnt.get("exp", 0),
                 "last_hunt": hnt.get("last_hunt", 0),
-                "last_daily": hnt.get("last_daily", "")
+                "last_daily": hnt.get("last_daily", ""),
+                "crystals": hnt.get("crystals", 0),
+                "streak": hnt.get("streak", 0),
+                "loot_boxes": hnt.get("loot_boxes", 0),
+                "shadows": hnt.get("shadows", []),
+                "title": hnt.get("title", "")
             }
         logging.info("✅ MongoDB Connected & Permanent Data Loaded!")
     else:
@@ -161,8 +170,12 @@ def ensure_user_registered(update: Update):
     if not user: return
     username = f"@{user.username}" if user.username else ""
     if user.id not in hunter_db:
-        hunter_db[user.id] = {"name": _display_name(user), "username": username, "exp": 0, "last_hunt": 0, "last_daily": ""}
+        hunter_db[user.id] = {"name": _display_name(user), "username": username, "exp": 0, "last_hunt": 0, "last_daily": "", "crystals": 0, "streak": 0, "loot_boxes": 0, "shadows": [], "title": ""}
     
+    # Update missing keys for old users safely
+    for key, val in [("crystals", 0), ("streak", 0), ("loot_boxes", 0), ("shadows", []), ("title", "")]:
+        if key not in hunter_db[user.id]: hunter_db[user.id][key] = val
+
     hunter_db[user.id]["name"] = _display_name(user)
     hunter_db[user.id]["username"] = username
     if user.id == OWNER_ID: hunter_db[user.id]["exp"] = 9999999
@@ -190,15 +203,27 @@ async def hunter_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target_user = update.message.reply_to_message.from_user if update.message.reply_to_message else update.effective_user
     username = f"@{target_user.username}" if target_user.username else ""
     if target_user.id not in hunter_db:
-        hunter_db[target_user.id] = {"name": _display_name(target_user), "username": username, "exp": 0, "last_hunt": 0, "last_daily": ""}
+        hunter_db[target_user.id] = {"name": _display_name(target_user), "username": username, "exp": 0, "last_hunt": 0, "last_daily": "", "crystals": 0, "streak": 0, "loot_boxes": 0, "shadows": [], "title": ""}
     if target_user.id == OWNER_ID: hunter_db[target_user.id]["exp"] = 9999999
 
     data = hunter_db[target_user.id]
     level, rank = get_hunter_stats(data["exp"], target_user.id)
     uname_display = f" ({data['username']})" if data['username'] else ""
     safe_name = str(data['name']).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    title_disp = f"\n👑 <b>Title:</b> {data['title']}" if data.get("title") else ""
+    shadows_count = len(data.get("shadows", []))
     
-    text = f"🪪 <b>HUNTER LICENSE</b>\n\n👤 <b>Name:</b> {safe_name}{uname_display}\n🎖 <b>Rank:</b> {rank}\n📊 <b>Level:</b> {level}\n⚡ <b>EXP:</b> {data['exp'] if level != 'MAX' else '∞'}"
+    text = f"""🪪 <b>HUNTER LICENSE</b>
+
+👤 <b>Name:</b> {safe_name}{uname_display}{title_disp}
+🎖 <b>Rank:</b> {rank}
+📊 <b>Level:</b> {level}
+⚡ <b>EXP:</b> {data['exp'] if level != 'MAX' else '∞'}
+🔮 <b>Magic Crystals:</b> {data.get('crystals', 0)}
+👥 <b>Shadow Soldiers:</b> {shadows_count}
+🔥 <b>Daily Streak:</b> {data.get('streak', 0)} Days
+🧰 <b>Loot Boxes:</b> {data.get('loot_boxes', 0)}"""
+
     await update.message.reply_text(text, parse_mode="HTML")
 
 async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -208,37 +233,78 @@ async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if now - data["last_hunt"] < 3600: 
         m, s = divmod(int(3600 - (now - data["last_hunt"])), 60)
-        return await update.message.reply_text(f"⏳ Dungeon portal closed! Wait {m}m {s}s to hunt again.")
+        return await update.message.reply_text(f"⏳ Dungeon portal closed! Wait {m}m {s}s to hunt again. (Use /shop to buy a Dungeon Key!)")
     
     data["last_hunt"] = now
+    # Shadows give extra bonus
+    shadow_bonus = len(data.get("shadows", [])) * 5
+
     events = [
-        ("🟢 E-Rank Gate: Defeated 5 Goblins!", 25), ("🟢 D-Rank Gate: Killed giant slimes.", 40),
-        ("🟡 C-Rank Gate: Fought High Orcs.", 70), ("🔴 Boss Encounter! Barely escaped with your life.", -10),
-        ("🌟 Double Dungeon! You found a secret reward!", 120), ("❌ Ambushed by another hunter! Lost some EXP.", -20)
+        ("🟢 E-Rank Gate: Defeated 5 Goblins!", 25, 2), 
+        ("🟢 D-Rank Gate: Killed giant slimes.", 40, 4),
+        ("🟡 C-Rank Gate: Fought High Orcs.", 70, 8), 
+        ("🔴 Boss Encounter! Barely escaped with your life.", -10, 0),
+        ("🌟 Double Dungeon! You found a secret reward!", 120, 15), 
+        ("❌ Ambushed by another hunter! Lost some EXP.", -20, 0)
     ]
-    event, exp_gain = random.choice(events)
-    if user.id != OWNER_ID: data["exp"] = max(0, data["exp"] + exp_gain)
+    event, exp_gain, cryst_gain = random.choice(events)
+    
+    if exp_gain > 0: exp_gain += shadow_bonus
+    
+    if user.id != OWNER_ID: 
+        data["exp"] = max(0, data["exp"] + exp_gain)
+        data["crystals"] += cryst_gain
     
     save_hunter(user.id)
     level, rank = get_hunter_stats(data["exp"], user.id)
-    await update.message.reply_text(f"⛩️ **Dungeon Raid Results:**\n\n{event}\n⚡ **Total EXP:** {data['exp'] if level != 'MAX' else '∞'} | **Level:** {level}")
+    shadow_text = f" (Shadow Bonus: +{shadow_bonus})" if shadow_bonus > 0 and exp_gain > 0 else ""
+    await update.message.reply_text(f"⛩️ **Dungeon Raid Results:**\n\n{event}\n⚡ **EXP:** {exp_gain}{shadow_text} | 🔮 **Crystals:** {cryst_gain}\n📊 **Total EXP:** {data['exp'] if level != 'MAX' else '∞'} | **Level:** {level}")
 
 async def daily_quest(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     user = update.effective_user
     now_ist = dt.now(ZoneInfo("Asia/Kolkata"))
-    reset_day = str(now_ist.date() if now_ist.hour >= 1 else (now_ist - timedelta(days=1)).date())
+    today = str(now_ist.date() if now_ist.hour >= 1 else (now_ist - timedelta(days=1)).date())
+    yesterday = str((now_ist - timedelta(days=1)).date() if now_ist.hour >= 1 else (now_ist - timedelta(days=2)).date())
     
     data = hunter_db[user.id]
-    if data["last_daily"] == reset_day:
+    if data["last_daily"] == today:
         return await update.message.reply_text("⏳ System: Daily Quest already completed! Next quest unlocks at 1:00 AM IST.")
         
-    data["last_daily"] = reset_day
-    if user.id != OWNER_ID: data["exp"] += 150
+    if data["last_daily"] == yesterday: data["streak"] = data.get("streak", 0) + 1
+    else: data["streak"] = 1
+        
+    data["last_daily"] = today
+    if user.id != OWNER_ID: 
+        data["exp"] += 150
+        data["crystals"] += 20
+        
+    streak_msg = f"🔥 Streak: Day {data['streak']}!"
+    if data["streak"] % 7 == 0:
+        data["loot_boxes"] += 1
+        streak_msg += "\n🎁 **7-DAY REWARD: You received an S-Rank Loot Box! (Use /open_box)**"
     
     save_hunter(user.id)
     level, rank = get_hunter_stats(data["exp"], user.id)
-    await update.message.reply_text(f"🏋️‍♂️ **Daily Quest Completed!**\n100 Pushups, 100 Situps, 10km Run!\n\n🌟 +150 EXP Gained!\n📊 Current Level: {level}")
+    await update.message.reply_text(f"🏋️‍♂️ **Daily Quest Completed!**\n100 Pushups, 100 Situps, 10km Run!\n\n🌟 +150 EXP | 🔮 +20 Crystals\n{streak_msg}\n📊 Current Level: {level}")
+
+async def open_loot_box(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ensure_user_registered(update)
+    user = update.effective_user
+    data = hunter_db[user.id]
+    
+    if data.get("loot_boxes", 0) <= 0: return await update.message.reply_text("❌ You don't have any S-Rank Loot Boxes. Complete a 7-day /daily streak to get one!")
+        
+    data["loot_boxes"] -= 1
+    exp_win = random.randint(500, 2000)
+    cryst_win = random.randint(50, 200)
+    
+    if user.id != OWNER_ID:
+        data["exp"] += exp_win
+        data["crystals"] += cryst_win
+    save_hunter(user.id)
+    
+    await update.message.reply_text(f"🧰 <b>Opening S-Rank Loot Box...</b>\n\n✨ <b>JACKPOT!</b> ✨\nYou found <b>{exp_win} EXP</b> and <b>{cryst_win} Magic Crystals</b> 🔮!", parse_mode="HTML")
 
 async def give_exp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
@@ -252,7 +318,7 @@ async def give_exp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if amount <= 0: return await update.message.reply_text("❌ Amount 0 se zyada hona chahiye.")
         
     if target.id not in hunter_db:
-        hunter_db[target.id] = {"name": _display_name(target), "username": f"@{target.username}" if target.username else "", "exp": 0, "last_hunt": 0, "last_daily": ""}
+        hunter_db[target.id] = {"name": _display_name(target), "username": f"@{target.username}" if target.username else "", "exp": 0, "last_hunt": 0, "last_daily": "", "crystals": 0, "streak": 0, "loot_boxes": 0, "shadows": [], "title": ""}
         
     sender_data, target_data = hunter_db[sender.id], hunter_db[target.id]
     if sender.id != OWNER_ID:
@@ -264,30 +330,297 @@ async def give_exp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(f"💸 <b>EXP Transferred!</b>\n\n<b>{str(sender_data['name']).replace('<','&lt;')}</b> gave <b>{amount} EXP</b> to <b>{str(target_data['name']).replace('<','&lt;')}</b> ⚡", parse_mode="HTML")
 
-async def top_hunter_local(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ------------- PVP SYSTEM -------------
+async def pvp_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ensure_user_registered(update)
+    challenger = update.effective_user
+    chat_id = update.effective_chat.id
+    
+    if not update.message.reply_to_message: return await update.message.reply_text("❌ Reply to the Hunter you want to duel with: `/pvp <amount>`")
+    opponent = update.message.reply_to_message.from_user
+    
+    if challenger.id == opponent.id or opponent.is_bot: return await update.message.reply_text("❌ System error: Invalid target for duel.")
+    if not context.args or not context.args[0].isdigit(): return await update.message.reply_text("❌ Correct format: `/pvp <amount>`")
+        
+    bet = int(context.args[0])
+    if bet < 10: return await update.message.reply_text("❌ Minimum bet is 10 EXP.")
+    
+    c_data = hunter_db[challenger.id]
+    if c_data["exp"] < bet and challenger.id != OWNER_ID: return await update.message.reply_text(f"❌ You don't have enough EXP! (You have {c_data['exp']})")
+        
+    pvp_id = f"{chat_id}_{challenger.id}_{opponent.id}_{int(time.time())}"
+    active_pvps[pvp_id] = {"c_id": challenger.id, "o_id": opponent.id, "bet": bet, "c_name": _display_name(challenger), "o_name": _display_name(opponent)}
+    
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⚔️ ACCEPT", callback_data=f"pvp_accept_{pvp_id}"), InlineKeyboardButton("🏃 DECLINE", callback_data=f"pvp_decline_{pvp_id}")]
+    ])
+    
+    await update.message.reply_text(
+        f"⚠️ **[ DUEL REQUEST ]** ⚠️\n\n{mention_html(challenger.id, _display_name(challenger))} challenged {mention_html(opponent.id, _display_name(opponent))}!\n💰 **Bet:** {bet} EXP\n\nDo you accept the duel?",
+        parse_mode="HTML", reply_markup=markup
+    )
+
+async def pvp_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    data = query.data.split("_")
+    action, pvp_id = data[1], "_".join(data[2:])
+    
+    if pvp_id not in active_pvps: return await query.answer("Duel expired or already finished!", show_alert=True)
+    pvp = active_pvps[pvp_id]
+    
+    if user_id != pvp["o_id"] and user_id != pvp["c_id"]: return await query.answer("This duel is not for you!", show_alert=True)
+    if action == "decline" and user_id == pvp["o_id"]:
+        del active_pvps[pvp_id]
+        return await query.edit_message_text(f"🏃 {pvp['o_name']} declined the duel. Coward!")
+    
+    if action == "accept" and user_id == pvp["o_id"]:
+        if hunter_db[pvp["o_id"]]["exp"] < pvp["bet"] and pvp["o_id"] != OWNER_ID:
+            return await query.answer("You don't have enough EXP to accept!", show_alert=True)
+            
+        await query.edit_message_text(f"⚔️ **DUEL STARTED!**\n{pvp['c_name']} VS {pvp['o_name']}\n\n*Clashing weapons...*")
+        await asyncio.sleep(1.5)
+        
+        c_lvl, _ = get_hunter_stats(hunter_db[pvp["c_id"]]["exp"], pvp["c_id"])
+        o_lvl, _ = get_hunter_stats(hunter_db[pvp["o_id"]]["exp"], pvp["o_id"])
+        
+        c_weight = c_lvl if c_lvl != "MAX" else 999
+        o_weight = o_lvl if o_lvl != "MAX" else 999
+        
+        winner_id, loser_id = (pvp["c_id"], pvp["o_id"]) if random.choices([True, False], weights=[c_weight+10, o_weight+10])[0] else (pvp["o_id"], pvp["c_id"])
+        
+        if winner_id != OWNER_ID: hunter_db[winner_id]["exp"] += pvp["bet"]
+        if loser_id != OWNER_ID: hunter_db[loser_id]["exp"] = max(0, hunter_db[loser_id]["exp"] - pvp["bet"])
+        
+        save_hunter(winner_id); save_hunter(loser_id)
+        w_name = hunter_db[winner_id]["name"]
+        l_name = hunter_db[loser_id]["name"]
+        
+        await query.edit_message_text(f"🏆 **DUEL FINISHED!** 🏆\n\n💥 {w_name} dominated the fight and defeated {l_name}!\n\n🏅 **{w_name}** won {pvp['bet']} EXP!")
+        del active_pvps[pvp_id]
+
+# ------------- SHOP SYSTEM -------------
+async def shop_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ensure_user_registered(update)
+    user = update.effective_user
+    cryst = hunter_db[user.id].get("crystals", 0)
+    
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🧪 Healing Potion (50 🔮) - Remove 1 Warn", callback_data="shop_heal")],
+        [InlineKeyboardButton("🗝️ Dungeon Key (100 🔮) - Reset /hunt cooldown", callback_data="shop_key")],
+        [InlineKeyboardButton("👑 Custom Title (500 🔮) - Add profile title", callback_data="shop_title")]
+    ])
+    await update.message.reply_text(f"🛒 **SYSTEM SHOP** 🛒\n\n🔮 **Your Magic Crystals:** {cryst}\n\nBuy items to aid your journey:", reply_markup=markup)
+
+async def shop_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    action = query.data.split("_")[1]
+    chat_id = query.message.chat.id
+    
+    data = hunter_db[user_id]
+    cryst = data.get("crystals", 0)
+    
+    if action == "heal":
+        if cryst < 50: return await query.answer("Not enough crystals!", show_alert=True)
+        if warnings_db[chat_id][user_id] <= 0: return await query.answer("You have 0 warnings, no need to heal!", show_alert=True)
+        data["crystals"] -= 50
+        warnings_db[chat_id][user_id] -= 1
+        save_hunter(user_id)
+        await query.answer("Purchased Healing Potion! 1 Warning removed.", show_alert=True)
+        
+    elif action == "key":
+        if cryst < 100: return await query.answer("Not enough crystals!", show_alert=True)
+        data["crystals"] -= 100
+        data["last_hunt"] = 0
+        save_hunter(user_id)
+        await query.answer("Purchased Dungeon Key! You can /hunt again right now.", show_alert=True)
+        
+    elif action == "title":
+        if cryst < 500: return await query.answer("Not enough crystals!", show_alert=True)
+        data["crystals"] -= 500
+        titles = ["Shadow Monarch", "S-Rank Elite", "Guild Master's Right Hand", "Demon King", "Dragon Slayer"]
+        new_title = random.choice(titles)
+        data["title"] = new_title
+        save_hunter(user_id)
+        await query.answer(f"Purchased Title! You are now known as: {new_title}", show_alert=True)
+
+# ------------- PREMIUM RANDOM DUNGEON SYSTEM -------------
+async def gate_break(context: ContextTypes.DEFAULT_TYPE):
+    chat_id = context.job.data
+    if chat_id in active_dungeons:
+        dungeon = active_dungeons.pop(chat_id)
+        penalty = dungeon['penalty']
+        affected = 0
+        for uid in chat_members_db.get(chat_id, set()):
+            if uid in hunter_db and uid != OWNER_ID:
+                hunter_db[uid]["exp"] = max(0, hunter_db[uid]["exp"] - penalty)
+                save_hunter(uid)
+                affected += 1
+                
+        break_caption = f"""💀 <b>[ SYSTEM WARNING ]</b> 💀
+<i>Hunters failed to clear the dungeon in time...</i>
+
+💠 <b>STATUS:</b> ⚫ <b>GATE BREAK (FAILED)</b>
+⛩️ <b>GATE RANK:</b> <code> {dungeon['rank']}-Rank </code>
+👹 <b>BOSS NAME:</b> <code> {DUNGEON_RANKS[dungeon['rank']]['name']} (ESCAPED) </code>"""
+        
+        try:
+            await context.bot.edit_message_caption(chat_id=chat_id, message_id=dungeon["msg_id"], caption=break_caption, parse_mode="HTML")
+            await context.bot.send_message(chat_id, f"🚨 <b>GATE BREAK!</b> The Boss escaped and attacked the Guild!\n📉 Penalty: {affected} active Hunters lost {penalty} EXP.", parse_mode="HTML")
+        except: pass
+
+async def clear_dungeon(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, participants: list, last_hitter_id: int):
+    dungeon = active_dungeons.pop(chat_id, None)
+    if not dungeon: return
+    
+    if "job" in dungeon: dungeon["job"].schedule_removal()
+    
+    reward = dungeon["reward"]
+    cryst = dungeon["crystals"]
+    winners_text = ""
+    
+    for uid in participants:
+        if uid in hunter_db and uid != OWNER_ID:
+            hunter_db[uid]["exp"] += reward
+            hunter_db[uid]["crystals"] += cryst
+            save_hunter(uid)
+            uname = hunter_db[uid].get('username', '')
+            display_uname = uname if uname else hunter_db[uid]['name']
+            winners_text += f"🗡️ {display_uname} <code> (+{reward} EXP, +{cryst} 🔮) </code>\n"
+            
+    clear_caption = f"""✅ <b>[ SYSTEM NOTIFICATION ]</b> ✅
+<i>The Gate has been successfully secured!</i>
+
+💠 <b>STATUS:</b> 🔴 <b>CLOSED (CLEARED)</b>
+⛩️ <b>GATE RANK:</b> <code> {dungeon['rank']}-Rank </code>
+👹 <b>BOSS NAME:</b> <code> {DUNGEON_RANKS[dungeon['rank']]['name']} (DEFEATED) </code>"""
+            
+    try:
+        await context.bot.edit_message_caption(chat_id=chat_id, message_id=dungeon["msg_id"], caption=clear_caption, parse_mode="HTML")
+        
+        boss_name = DUNGEON_RANKS[dungeon['rank']]['name']
+        new_msg = f"""🎊 <b>DUNGEON CONQUERED!</b> 🎊
+
+🏆 <b>HEROES OF THE RAID:</b>
+{winners_text}
+
+🌑 {mention_html(last_hitter_id, hunter_db[last_hitter_id]['name'])}, you delivered the final blow! The Boss's soul lingers.
+⏳ You have 30 seconds to type <code>/arise</code> and attempt Shadow Extraction!"""
+        
+        await context.bot.send_message(chat_id, new_msg, parse_mode="HTML")
+        arise_targets[chat_id] = {"uid": last_hitter_id, "boss": boss_name, "time": time.time()}
+    except: pass
+
+async def arise_shadow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     chat_id = update.effective_chat.id
-    members = chat_members_db.get(chat_id, set())
-    sorted_hunters = sorted([uid for uid in members if uid in hunter_db], key=lambda x: hunter_db[x]["exp"], reverse=True)[:10]
-    if not sorted_hunters: return await update.message.reply_text("No active hunters in this guild.")
+    user_id = update.effective_user.id
+    
+    if chat_id not in arise_targets or arise_targets[chat_id]["uid"] != user_id:
+        return await update.message.reply_text("❌ There is no shadow for you to extract here, or you lack the authority.")
         
-    text = "🏆 <b>TOP 10 GUILD HUNTERS</b> 🏆\n\n"
-    for i, uid in enumerate(sorted_hunters, 1):
-        h = hunter_db[uid]
-        level, rank = get_hunter_stats(h["exp"], uid)
-        text += f"<b>{i}.</b> {str(h['name']).replace('<','&lt;')}{' '+h.get('username') if h.get('username') else ''} - Lvl {level} ({rank})\n"
-    await update.message.reply_text(text, parse_mode="HTML")
+    target = arise_targets.pop(chat_id)
+    if time.time() - target["time"] > 30:
+        return await update.message.reply_text("❌ You took too long. The shadow faded into the abyss.")
+        
+    # 50% Chance
+    if random.choice([True, False]):
+        hunter_db[user_id]["shadows"].append(target["boss"])
+        save_hunter(user_id)
+        await update.message.reply_text(f"🌑 <b>SHADOW EXTRACTION SUCCESSFUL!</b> 🌑\n\n<i>\"Arise.\"</i>\n{target['boss']} is now your loyal Shadow Soldier!", parse_mode="HTML")
+    else:
+        await update.message.reply_text(f"🌑 <b>SHADOW EXTRACTION FAILED.</b> 🌑\n\n<i>The soul of {target['boss']} resisted your command and vanished.</i>", parse_mode="HTML")
 
-async def world_top_global(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def spawn_dungeon(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int):
+    ranks = ["E", "E", "D", "D", "C", "C", "B", "A", "S", "RED"]
+    rank = random.choice(ranks)
+    data = DUNGEON_RANKS[rank]
+    
+    dtype = random.choice([1, 2, 3])
+    
+    dungeon_info = {
+        "rank": rank, "penalty": data["penalty"], "reward": data["reward"], "crystals": data["crystals"],
+        "hp": data["hp"], "max_hp": data["hp"], "type": dtype, "participants": []
+    }
+    
+    instructions = ""
+    markup = None
+    
+    if dtype == 1:
+        instructions = f"Boss HP is {data['hp']}! Mash the ATTACK button below to reduce it to 0!"
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton(f"⚔️ ATTACK (HP: {data['hp']})", callback_data="dungeon_attack")]])
+    elif dtype == 2:
+        word = random.choice(DUNGEON_WORDS)
+        dungeon_info["word"] = word
+        instructions = f"Quick! Reply to this message and type exactly: <code>{word}</code>"
+    elif dtype == 3:
+        instructions = "Heavy Boss! We need 3 different Hunters to click JOIN RAID!"
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton("🛡️ JOIN RAID (0/3)", callback_data="dungeon_join")]])
+
+    caption = f"""⚠️ <b>[ SYSTEM NOTIFICATION ]</b> ⚠️
+<i>A dimensional rift has opened in the Guild!</i>
+
+💠 <b>STATUS:</b> 🟢 <b>OPEN</b>
+⛩️ <b>GATE RANK:</b> <code> {rank}-Rank </code>
+👹 <b>BOSS NAME:</b> <code> {data['name']} </code>
+🩸 <b>BOSS HP:</b> <code> {data['hp']} </code>
+
+📜 <b>MISSION LOG:</b>
+<i>{instructions}</i>
+
+⏳ <b>TIME REMAINING:</b> <code> 05:00 Minutes </code>
+🎁 <b>CLEAR REWARD:</b> <code> +{data['reward']} EXP, +{data['crystals']} 🔮 </code>"""
+
+    try:
+        msg = await context.bot.send_video(
+            chat_id=chat_id, video=data["video"], caption=caption, 
+            parse_mode="HTML", reply_markup=markup
+        )
+        dungeon_info["msg_id"] = msg.message_id
+        dungeon_info["job"] = context.job_queue.run_once(gate_break, 300, data=chat_id)
+        active_dungeons[chat_id] = dungeon_info
+    except Exception as e:
+        logging.error(f"Dungeon Spawn Error: {e}")
+
+async def dungeon_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    chat_id = query.message.chat.id
+    user_id = query.from_user.id
     ensure_user_registered(update)
-    sorted_hunters = sorted(hunter_db.items(), key=lambda x: x[1]["exp"], reverse=True)[:10]
-    if not sorted_hunters: return await update.message.reply_text("The world is empty. No hunters found.")
+    
+    if chat_id not in active_dungeons: return await query.answer("Dungeon is already closed or broken!", show_alert=True)
+    dungeon = active_dungeons[chat_id]
+    
+    if query.data == "dungeon_attack" and dungeon["type"] == 1:
+        if user_id not in dungeon["participants"]: dungeon["participants"].append(user_id)
+        dmg = random.randint(10, max(15, dungeon["max_hp"] // 10))
+        dungeon["hp"] -= dmg
         
-    text = "🌍 <b>WORLD TOP 10 S-RANK HUNTERS</b> 🌍\n\n"
-    for i, (uid, h) in enumerate(sorted_hunters, 1):
-        level, rank = get_hunter_stats(h["exp"], uid)
-        text += f"<b>{i}.</b> {str(h['name']).replace('<','&lt;')}{' '+h.get('username') if h.get('username') else ''} - Lvl {level} ({rank})\n"
-    await update.message.reply_text(text, parse_mode="HTML")
+        if dungeon["hp"] <= 0:
+            await query.answer("Boss Defeated! 🩸", show_alert=True)
+            await clear_dungeon(update, context, chat_id, dungeon["participants"], user_id)
+        else:
+            try:
+                await query.answer(f"Dealt {dmg} DMG! ⚔️")
+                markup = InlineKeyboardMarkup([[InlineKeyboardButton(f"⚔️ ATTACK (HP: {dungeon['hp']})", callback_data="dungeon_attack")]])
+                await query.edit_message_reply_markup(reply_markup=markup)
+            except: pass
+            
+    elif query.data == "dungeon_join" and dungeon["type"] == 3:
+        if user_id in dungeon["participants"]: return await query.answer("You already joined the raid!", show_alert=True)
+        dungeon["participants"].append(user_id)
+        count = len(dungeon["participants"])
+        
+        if count >= 3:
+            await query.answer("Raid Full! Boss Defeated! 🛡️", show_alert=True)
+            await clear_dungeon(update, context, chat_id, dungeon["participants"], user_id)
+        else:
+            try:
+                await query.answer("You joined the raid! 🛡️")
+                markup = InlineKeyboardMarkup([[InlineKeyboardButton(f"🛡️ JOIN RAID ({count}/3)", callback_data="dungeon_join")]])
+                await query.edit_message_reply_markup(reply_markup=markup)
+            except: pass
 
 # ------------- MODERATION COMMANDS -------------
 async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -353,37 +686,25 @@ async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🌹 **CINDRELLA COMMANDS** 🌹
 
 **⚔️ Solo Leveling (RPG):**
-`/stats [reply]` - Check Hunter License
+`/stats [reply]` - Check Hunter License & Items
 `/hunt` - Enter Dungeon & Kill Monsters
-`/daily` - Daily System Quest (+150 EXP)
+`/daily` - Daily Quest, Streak & Loot Box
 `/give <reply> <amount>` - Donate EXP
+`/pvp <reply> <amount>` - Duel a Hunter for EXP
+`/shop` - Buy Potions, Keys & Titles
+`/arise` - Extract Shadow (After Boss Kill)
+`/open_box` - Open S-Rank Loot Box
 `/top_hunter` - Top 10 Hunters in Group
 `/world_top` - Global Top 10 S-Rank Hunters
 
 **🛠 Moderation:**
-`/ban <reply/id>` - Ban a user
-`/unban <id>` - Unban a user
-`/kick <reply/id>` - Kick a user
-`/mute <reply/id>` - Mute a user
-`/unmute <reply/id>` - Unmute a user
-`/pin <reply>` - Pin a message
-`/unpin <reply>` - Unpin a message
-`/promote <reply/id>` - Promote user to Admin
-`/warn <reply> [reason]` - Warn user
-`/unwarn <reply>` - Remove a warn
-
-**🧹 Purge:**
-`/purge <reply>` - Delete msgs from reply to current
-`/purgegroup` - Delete last 100 messages
+`/ban`, `/unban`, `/kick`, `/mute`, `/unmute`
+`/pin`, `/unpin`, `/promote`, `/warn`, `/unwarn`
+`/purge`, `/purgegroup`
 
 **🛡 Group Management:**
-`/addblacklist <word>` - Auto delete bad word
-`/rmblacklist <word>` - Remove word from blacklist
-`/blocklist` - Show all blacklisted words
-`/addfilter <word> <reply>` - Set custom bot reply
-`/rmfilter <word>` - Remove custom filter
-`/setrules <text>` - Set group rules
-`/rules` - Show group rules
+`/addblacklist`, `/rmblacklist`, `/blocklist`
+`/addfilter`, `/rmfilter`, `/setrules`, `/rules`
 
 **✨ Fun & Utils:**
 `/couple` - Couple of the day!
@@ -568,10 +889,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
-    
-    # NEW SUPREME AI PROMPT
     system_prompt = "You are CINDRELLA, the Supreme System AI and Guild Manager of a National Level Hunter Guild. You are highly intelligent, slightly arrogant but deeply caring about your hunters, witty, and extremely loyal to the Guild Master. You talk like a high-end, powerful AI mixed with an anime boss lady. You use words related to gaming, leveling up, quests, and stats. Always reply in Hinglish or English. Keep replies short (1-2 lines), engaging, and badass. Never break character."
-    
     models = ["meta-llama/llama-3.3-70b-instruct:free", "google/gemma-3-27b-it:free", "nvidia/nemotron-3-nano-30b-a3b:free", "stepfun/step-3.5-flash:free", "arcee-ai/trinity-large-preview:free"]
     
     for model in models:
@@ -605,158 +923,6 @@ async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def couple_daily_reset(context: ContextTypes.DEFAULT_TYPE): couples_db.clear()
 
-# ------------- PREMIUM RANDOM DUNGEON SYSTEM -------------
-async def gate_break(context: ContextTypes.DEFAULT_TYPE):
-    chat_id = context.job.data
-    if chat_id in active_dungeons:
-        dungeon = active_dungeons.pop(chat_id)
-        penalty = dungeon['penalty']
-        affected = 0
-        for uid in chat_members_db.get(chat_id, set()):
-            if uid in hunter_db and uid != OWNER_ID:
-                hunter_db[uid]["exp"] = max(0, hunter_db[uid]["exp"] - penalty)
-                save_hunter(uid)
-                affected += 1
-                
-        break_caption = f"""💀 <b>[ SYSTEM WARNING ]</b> 💀
-<i>Hunters failed to clear the dungeon in time...</i>
-
-💠 <b>STATUS:</b> ⚫ <b>GATE BREAK (FAILED)</b>
-⛩️ <b>GATE RANK:</b> <code> {dungeon['rank']}-Rank </code>
-👹 <b>BOSS NAME:</b> <code> {DUNGEON_RANKS[dungeon['rank']]['name']} (ESCAPED) </code>
-
-🩸 <b>GUILD CASUALTIES:</b>
-<i>The Boss escaped the gate and attacked the Guild members!</i>
-📉 <b>Penalty:</b> <i>{affected} active Hunters lost {penalty} EXP.</i>"""
-        
-        try:
-            # Video delete nahi hogi, bas caption update aur keyboard delete!
-            await context.bot.edit_message_caption(chat_id=chat_id, message_id=dungeon["msg_id"], caption=break_caption, parse_mode="HTML")
-        except: pass
-
-async def clear_dungeon(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, participants: list):
-    dungeon = active_dungeons.pop(chat_id, None)
-    if not dungeon: return
-    
-    if "job" in dungeon: dungeon["job"].schedule_removal()
-    
-    reward = dungeon["reward"]
-    winners_text = ""
-    for uid in participants:
-        if uid in hunter_db and uid != OWNER_ID:
-            hunter_db[uid]["exp"] += reward
-            save_hunter(uid)
-            # USERNAMES FIX FOR HEROES LIST
-            uname = hunter_db[uid].get('username', '')
-            display_uname = uname if uname else hunter_db[uid]['name']
-            winners_text += f"🗡️ {display_uname} <code> (+{reward} EXP) </code>\n"
-            
-    clear_caption = f"""✅ <b>[ SYSTEM NOTIFICATION ]</b> ✅
-<i>The Gate has been successfully secured!</i>
-
-💠 <b>STATUS:</b> 🔴 <b>CLOSED (CLEARED)</b>
-⛩️ <b>GATE RANK:</b> <code> {dungeon['rank']}-Rank </code>
-👹 <b>BOSS NAME:</b> <code> {DUNGEON_RANKS[dungeon['rank']]['name']} (DEFEATED) </code>
-
-🏆 <b>HEROES OF THE RAID:</b>
-{winners_text}
-<i>The dungeon is now sealed. Excellent work, Hunters!</i>"""
-            
-    try:
-        # Video wahi rahegi, caption update ho jayega!
-        await context.bot.edit_message_caption(chat_id=chat_id, message_id=dungeon["msg_id"], caption=clear_caption, parse_mode="HTML")
-    except: pass
-
-async def spawn_dungeon(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int):
-    ranks = ["E", "E", "D", "D", "C", "C", "B", "A", "S", "RED"]
-    rank = random.choice(ranks)
-    data = DUNGEON_RANKS[rank]
-    
-    dtype = random.choice([1, 2, 3])
-    
-    dungeon_info = {
-        "rank": rank, "penalty": data["penalty"], "reward": data["reward"], 
-        "hp": data["hp"], "max_hp": data["hp"], "type": dtype, "participants": set()
-    }
-    
-    instructions = ""
-    markup = None
-    
-    if dtype == 1:
-        instructions = f"Boss HP is {data['hp']}! Mash the ATTACK button below to reduce it to 0!"
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton(f"⚔️ ATTACK (HP: {data['hp']})", callback_data="dungeon_attack")]])
-    elif dtype == 2:
-        word = random.choice(DUNGEON_WORDS)
-        dungeon_info["word"] = word
-        instructions = f"Quick! Reply to this message and type exactly: <code>{word}</code>"
-    elif dtype == 3:
-        instructions = "Heavy Boss! We need 3 different Hunters to click JOIN RAID!"
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton("🛡️ JOIN RAID (0/3)", callback_data="dungeon_join")]])
-
-    caption = f"""⚠️ <b>[ SYSTEM NOTIFICATION ]</b> ⚠️
-<i>A dimensional rift has opened in the Guild!</i>
-
-💠 <b>STATUS:</b> 🟢 <b>OPEN</b>
-⛩️ <b>GATE RANK:</b> <code> {rank}-Rank </code>
-👹 <b>BOSS NAME:</b> <code> {data['name']} </code>
-🩸 <b>BOSS HP:</b> <code> {data['hp']} </code>
-
-📜 <b>MISSION LOG:</b>
-<i>{instructions}</i>
-
-⏳ <b>TIME REMAINING:</b> <code> 05:00 Minutes </code>
-🎁 <b>CLEAR REWARD:</b> <code> +{data['reward']} EXP </code>"""
-
-    try:
-        msg = await context.bot.send_video(
-            chat_id=chat_id, video=data["video"], caption=caption, 
-            parse_mode="HTML", reply_markup=markup
-        )
-        dungeon_info["msg_id"] = msg.message_id
-        dungeon_info["job"] = context.job_queue.run_once(gate_break, 300, data=chat_id)
-        active_dungeons[chat_id] = dungeon_info
-    except Exception as e:
-        logging.error(f"Dungeon Spawn Error: {e}")
-
-async def dungeon_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    chat_id = query.message.chat.id
-    user_id = query.from_user.id
-    ensure_user_registered(update)
-    
-    if chat_id not in active_dungeons: return await query.answer("Dungeon is already closed or broken!", show_alert=True)
-    dungeon = active_dungeons[chat_id]
-    
-    if query.data == "dungeon_attack" and dungeon["type"] == 1:
-        dungeon["participants"].add(user_id)
-        dmg = random.randint(10, max(15, dungeon["max_hp"] // 10))
-        dungeon["hp"] -= dmg
-        
-        if dungeon["hp"] <= 0:
-            await query.answer("Boss Defeated! 🩸", show_alert=True)
-            await clear_dungeon(update, context, chat_id, list(dungeon["participants"]))
-        else:
-            try:
-                await query.answer(f"Dealt {dmg} DMG! ⚔️")
-                markup = InlineKeyboardMarkup([[InlineKeyboardButton(f"⚔️ ATTACK (HP: {dungeon['hp']})", callback_data="dungeon_attack")]])
-                await query.edit_message_reply_markup(reply_markup=markup)
-            except: pass
-            
-    elif query.data == "dungeon_join" and dungeon["type"] == 3:
-        if user_id in dungeon["participants"]: return await query.answer("You already joined the raid!", show_alert=True)
-        dungeon["participants"].add(user_id)
-        count = len(dungeon["participants"])
-        
-        if count >= 3:
-            await query.answer("Raid Full! Boss Defeated! 🛡️", show_alert=True)
-            await clear_dungeon(update, context, chat_id, list(dungeon["participants"]))
-        else:
-            try:
-                await query.answer("You joined the raid! 🛡️")
-                markup = InlineKeyboardMarkup([[InlineKeyboardButton(f"🛡️ JOIN RAID ({count}/3)", callback_data="dungeon_join")]])
-                await query.edit_message_reply_markup(reply_markup=markup)
-            except: pass
-
 # ------------- CORE TEXT HANDLER -------------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
@@ -764,14 +930,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     ensure_user_registered(update)
     
-    # DUNGEON TYPING MECHANIC
     if chat_id in active_dungeons and active_dungeons[chat_id]["type"] == 2:
         if update.message.reply_to_message and update.message.reply_to_message.message_id == active_dungeons[chat_id]["msg_id"]:
             if msg_lower == active_dungeons[chat_id]["word"].lower():
-                await clear_dungeon(update, context, chat_id, [user.id])
+                if user.id not in active_dungeons[chat_id]["participants"]: active_dungeons[chat_id]["participants"].append(user.id)
+                await clear_dungeon(update, context, chat_id, active_dungeons[chat_id]["participants"], user.id)
                 return 
 
-    # DUNGEON TRIGGER COUNTER
     if update.effective_chat.type in ["group", "supergroup"]:
         group_msg_counts[chat_id] += 1
         if group_msg_counts[chat_id] >= 30:
@@ -845,15 +1010,20 @@ def main():
     
     application.add_handler(CallbackQueryHandler(admin_button_handler, pattern="^(broadcast|list_groups|add_admin|remove_admin|list_admins)$"))
     application.add_handler(CallbackQueryHandler(dungeon_button_handler, pattern="^dungeon_"))
+    application.add_handler(CallbackQueryHandler(pvp_button_handler, pattern="^pvp_"))
+    application.add_handler(CallbackQueryHandler(shop_button_handler, pattern="^shop_"))
     
     application.add_handler(CommandHandler("commands", commands_list))
-
     application.add_handler(CommandHandler("stats", hunter_profile))
     application.add_handler(CommandHandler("hunt", hunt))
     application.add_handler(CommandHandler("daily", daily_quest))
     application.add_handler(CommandHandler("give", give_exp))
     application.add_handler(CommandHandler("top_hunter", top_hunter_local))
     application.add_handler(CommandHandler("world_top", world_top_global))
+    application.add_handler(CommandHandler("pvp", pvp_request))
+    application.add_handler(CommandHandler("shop", shop_menu))
+    application.add_handler(CommandHandler("arise", arise_shadow))
+    application.add_handler(CommandHandler("open_box", open_loot_box))
 
     mod_cmds = ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote"]
     application.add_handler(CommandHandler(mod_cmds, mod_action))
