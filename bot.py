@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Give Shadows + Shadow Names in Stats + Owner Max Shadows)
+# bot.py - CINDRELLA final (Context Memory + AI Speed Fix)
 import os
 import logging
 import json
@@ -49,6 +49,10 @@ blacklist_db = defaultdict(set)
 filters_db = defaultdict(dict) 
 rules_db = {} 
 spam_tracker = defaultdict(lambda: defaultdict(list)) 
+
+# --- NEW: AI MEMORY STATE ---
+# Har user ke last 10 chats yaad rakhegi
+user_memory = defaultdict(list)
 
 # RPG & Global Group State
 known_groups = {} 
@@ -179,7 +183,6 @@ def ensure_user_registered(update: Update):
     hunter_db[user.id]["name"] = _display_name(user)
     hunter_db[user.id]["username"] = username
     
-    # OWNER MAX STATS FIX WITH SHADOWS
     if user.id == OWNER_ID: 
         hunter_db[user.id]["exp"] = 9999999
         hunter_db[user.id]["crystals"] = 9999999
@@ -327,7 +330,7 @@ async def open_loot_box(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(f"🧰 <b>Opening S-Rank Loot Box...</b>\n\n✨ <b>JACKPOT!</b> ✨\nYou found <b>{exp_win} EXP</b> and <b>{cryst_win} Magic Crystals</b> 🔮!", parse_mode="HTML")
 
-# --- INTERACTIVE GIVE COMMAND (WITH SHADOWS) ---
+# --- INTERACTIVE GIVE COMMAND ---
 async def give_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     sender = update.effective_user
@@ -938,7 +941,7 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     admin_text += f"🔹 Unknown Hunter (`{aid}`)\n"
         await query.message.reply_text(admin_text, parse_mode="Markdown")
 
-# ------------- AI & WELCOME -------------
+# ------------- AI & WELCOME (MEMORY FIXED) -------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text("Hey, I'm CINDRELLA 🌹—your AI Assistant!\nType /commands to see what I can do!", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -965,25 +968,41 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
+    user_id = update.effective_user.id
+    
     if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
     
-    system_prompt = "You are CINDRELLA, an exceptionally smart, friendly, and highly intelligent AI assistant. Your primary goal is to provide accurate, engaging, and helpful answers. CRITICAL RULE: You must strictly reply in the exact same language the user uses. If they type in English, reply in English. If they type in Hindi script, reply in Hindi. If they type in Hinglish (Hindi written in English alphabet), reply in Hinglish. Keep your responses concise (1-3 lines), natural, and conversational. Do not act like a robotic AI; be a great, smart conversationalist."
+    system_prompt = "You are CINDRELLA, an exceptionally smart, friendly, and highly intelligent AI assistant. Your primary goal is to provide accurate, engaging, and helpful answers. CRITICAL RULE: You must strictly reply in the exact same language the user uses. Keep your responses concise (1-3 lines), natural, and conversational. Do not act like a robotic AI; be a great, smart conversationalist."
     
-    models = ["meta-llama/llama-3.3-70b-instruct:free", "google/gemma-3-27b-it:free", "nvidia/nemotron-3-nano-30b-a3b:free", "stepfun/step-3.5-flash:free", "arcee-ai/trinity-large-preview:free"]
+    # MEMORY SYSTEM (SAVE LAST 10 MSGS)
+    if len(user_memory[user_id]) >= 10:
+        user_memory[user_id].pop(0) # Remove oldest
+    user_memory[user_id].append({"role": "user", "content": message_text})
+    
+    # FASTER AI MODELS WITH FALLBACKS
+    models = ["google/gemma-3-27b-it:free", "meta-llama/llama-3.3-70b-instruct:free", "nvidia/nemotron-3-nano-30b-a3b:free"]
+    
+    messages = [{"role": "system", "content": system_prompt}] + user_memory[user_id]
     
     for model in models:
         try:
-            payload = {"model": model, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": message_text}]}
-            async with httpx.AsyncClient(timeout=20) as client:
+            payload = {"model": model, "messages": messages}
+            async with httpx.AsyncClient(timeout=10) as client: # Faster Timeout
                 res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
                 if res.status_code == 200:
                     reply = res.json()["choices"][0]["message"]["content"]
                     usage_count["count"] += 1
+                    
+                    # Store AI reply in memory
+                    if len(user_memory[user_id]) >= 10: user_memory[user_id].pop(0)
+                    user_memory[user_id].append({"role": "assistant", "content": reply})
+                    
                     try: return await update.message.reply_text(reply[:4096])
                     except BadRequest: return await context.bot.send_message(chat_id=update.effective_chat.id, text=reply[:4096])
         except: continue
-    try: await update.message.reply_text("System processing error. Try again later.")
+        
+    try: await update.message.reply_text("System processing error or limit reached. Try again later.")
     except: pass
 
 async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
