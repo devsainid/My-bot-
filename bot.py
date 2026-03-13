@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Context Memory + AI Speed Fix)
+# bot.py - CINDRELLA final (AI Glitch Fix + Memory Optimized)
 import os
 import logging
 import json
@@ -50,8 +50,7 @@ filters_db = defaultdict(dict)
 rules_db = {} 
 spam_tracker = defaultdict(lambda: defaultdict(list)) 
 
-# --- NEW: AI MEMORY STATE ---
-# Har user ke last 10 chats yaad rakhegi
+# --- AI MEMORY STATE ---
 user_memory = defaultdict(list)
 
 # RPG & Global Group State
@@ -941,7 +940,7 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     admin_text += f"🔹 Unknown Hunter (`{aid}`)\n"
         await query.message.reply_text(admin_text, parse_mode="Markdown")
 
-# ------------- AI & WELCOME (MEMORY FIXED) -------------
+# ------------- AI & WELCOME (GLITCH FIXED) -------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text("Hey, I'm CINDRELLA 🌹—your AI Assistant!\nType /commands to see what I can do!", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -973,36 +972,41 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
     
-    system_prompt = "You are CINDRELLA, an exceptionally smart, friendly, and highly intelligent AI assistant. Your primary goal is to provide accurate, engaging, and helpful answers. CRITICAL RULE: You must strictly reply in the exact same language the user uses. Keep your responses concise (1-3 lines), natural, and conversational. Do not act like a robotic AI; be a great, smart conversationalist."
+    # STRICT HINGLISH PROMPT TO PREVENT URDU/KOREAN GLITCH
+    system_prompt = "You are CINDRELLA, a smart, witty, and cool Gen-Z AI assistant. CRITICAL RULE: Always reply in simple Hinglish (Hindi written in English alphabet) or pure English. NEVER use Urdu, Arabic, Korean, or Hindi scripts under any circumstance. Keep replies short (1-3 lines), natural, and engaging. Don't sound like a boring robot."
     
-    # MEMORY SYSTEM (SAVE LAST 10 MSGS)
-    if len(user_memory[user_id]) >= 10:
-        user_memory[user_id].pop(0) # Remove oldest
+    # MEMORY SYSTEM (SAVE LAST 6 MSGS - Prevents Timeout)
+    if len(user_memory[user_id]) >= 6:
+        user_memory[user_id] = user_memory[user_id][-5:]
     user_memory[user_id].append({"role": "user", "content": message_text})
     
     # FASTER AI MODELS WITH FALLBACKS
-    models = ["google/gemma-3-27b-it:free", "meta-llama/llama-3.3-70b-instruct:free", "nvidia/nemotron-3-nano-30b-a3b:free"]
+    models = [
+        "google/gemini-2.0-flash-lite-preview-02-05:free",
+        "meta-llama/llama-3-8b-instruct:free", 
+        "qwen/qwen-2.5-72b-instruct:free",
+        "google/gemma-2-9b-it:free"
+    ]
     
     messages = [{"role": "system", "content": system_prompt}] + user_memory[user_id]
     
     for model in models:
         try:
             payload = {"model": model, "messages": messages}
-            async with httpx.AsyncClient(timeout=10) as client: # Faster Timeout
+            async with httpx.AsyncClient(timeout=10) as client:
                 res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
                 if res.status_code == 200:
                     reply = res.json()["choices"][0]["message"]["content"]
                     usage_count["count"] += 1
                     
-                    # Store AI reply in memory
-                    if len(user_memory[user_id]) >= 10: user_memory[user_id].pop(0)
+                    if len(user_memory[user_id]) >= 6: user_memory[user_id] = user_memory[user_id][-5:]
                     user_memory[user_id].append({"role": "assistant", "content": reply})
                     
                     try: return await update.message.reply_text(reply[:4096])
                     except BadRequest: return await context.bot.send_message(chat_id=update.effective_chat.id, text=reply[:4096])
         except: continue
         
-    try: await update.message.reply_text("System processing error or limit reached. Try again later.")
+    try: await update.message.reply_text("Uff, mera server thoda busy hai. Ek minute baad try karna! 🥺")
     except: pass
 
 async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1183,7 +1187,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     replied = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
 
     if msg_lower in ["hi","hello","hey","yo","sup","hii","heyy","heya","cindy","cindrella","gm","gn"] and not mentioned and not replied:
-        await update.message.reply_text(random.choice(["System Online! 🌸","Guild Manager reporting! 💕","Hey Master! ⚔️","Dungeon ready when you are! ☀️"]))
+        await update.message.reply_text(random.choice(["Heyyy cutie 🌸", "Guild Manager here! 💕", "Hey Master! ⚔️", "Bol kya haal hain? ☀️"]))
     elif mentioned or replied:
         await ai_reply(update, context)
 
