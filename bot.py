@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (API 400/404 Glitch Fix + Memory Cleaner)
+# bot.py - CINDRELLA final (Give Shadows + Shadow Names in Stats + Owner Max Shadows)
 import os
 import logging
 import json
@@ -49,9 +49,6 @@ blacklist_db = defaultdict(set)
 filters_db = defaultdict(dict) 
 rules_db = {} 
 spam_tracker = defaultdict(lambda: defaultdict(list)) 
-
-# --- AI MEMORY STATE ---
-user_memory = defaultdict(list)
 
 # RPG & Global Group State
 known_groups = {} 
@@ -182,6 +179,7 @@ def ensure_user_registered(update: Update):
     hunter_db[user.id]["name"] = _display_name(user)
     hunter_db[user.id]["username"] = username
     
+    # OWNER MAX STATS FIX WITH SHADOWS
     if user.id == OWNER_ID: 
         hunter_db[user.id]["exp"] = 9999999
         hunter_db[user.id]["crystals"] = 9999999
@@ -329,7 +327,7 @@ async def open_loot_box(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(f"🧰 <b>Opening S-Rank Loot Box...</b>\n\n✨ <b>JACKPOT!</b> ✨\nYou found <b>{exp_win} EXP</b> and <b>{cryst_win} Magic Crystals</b> 🔮!", parse_mode="HTML")
 
-# --- INTERACTIVE GIVE COMMAND ---
+# --- INTERACTIVE GIVE COMMAND (WITH SHADOWS) ---
 async def give_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     sender = update.effective_user
@@ -940,7 +938,7 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     admin_text += f"🔹 Unknown Hunter (`{aid}`)\n"
         await query.message.reply_text(admin_text, parse_mode="Markdown")
 
-# ------------- AI & WELCOME (GLITCH & MEMORY FIXED) -------------
+# ------------- AI & WELCOME -------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text("Hey, I'm CINDRELLA 🌹—your AI Assistant!\nType /commands to see what I can do!", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -967,55 +965,25 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
-    user_id = update.effective_user.id
-    
     if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
     
-    # ANTI-GLITCH PROMPT (STRICT HINGLISH/ENGLISH)
-    system_prompt = "You are CINDRELLA, a smart, witty, and cool Gen-Z AI assistant. CRITICAL RULE: You must ONLY reply in Hinglish (Hindi written in English alphabet) or English. NEVER use Urdu script, Arabic script, Korean, or Devnagari under ANY circumstance. Keep replies short (1-3 lines), natural, and engaging."
+    system_prompt = "You are CINDRELLA, an exceptionally smart, friendly, and highly intelligent AI assistant. Your primary goal is to provide accurate, engaging, and helpful answers. CRITICAL RULE: You must strictly reply in the exact same language the user uses. If they type in English, reply in English. If they type in Hindi script, reply in Hindi. If they type in Hinglish (Hindi written in English alphabet), reply in Hinglish. Keep your responses concise (1-3 lines), natural, and conversational. Do not act like a robotic AI; be a great, smart conversationalist."
     
-    # MEMORY CLEANER (Merges consecutive messages to prevent 400 Bad Request API Crash)
-    user_memory[user_id].append({"role": "user", "content": message_text})
-    
-    if len(user_memory[user_id]) > 6:
-        user_memory[user_id] = user_memory[user_id][-6:]
-        
-    cleaned_memory = []
-    for msg in user_memory[user_id]:
-        if not cleaned_memory or cleaned_memory[-1]["role"] != msg["role"]:
-            cleaned_memory.append(msg)
-        else:
-            cleaned_memory[-1]["content"] += f" | {msg['content']}"
-            
-    user_memory[user_id] = cleaned_memory
-    
-    # ROCK SOLID FREE MODELS (No 404 errors)
-    models = [
-        "meta-llama/llama-3.1-8b-instruct:free",
-        "mistralai/mistral-7b-instruct:free",
-        "huggingfaceh4/zephyr-7b-beta:free",
-        "gryphe/mythomax-l2-13b:free"
-    ]
-    
-    messages = [{"role": "system", "content": system_prompt}] + cleaned_memory
+    models = ["meta-llama/llama-3.3-70b-instruct:free", "google/gemma-3-27b-it:free", "nvidia/nemotron-3-nano-30b-a3b:free", "stepfun/step-3.5-flash:free", "arcee-ai/trinity-large-preview:free"]
     
     for model in models:
         try:
-            payload = {"model": model, "messages": messages}
-            async with httpx.AsyncClient(timeout=15) as client:
+            payload = {"model": model, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": message_text}]}
+            async with httpx.AsyncClient(timeout=20) as client:
                 res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
                 if res.status_code == 200:
                     reply = res.json()["choices"][0]["message"]["content"]
                     usage_count["count"] += 1
-                    
-                    user_memory[user_id].append({"role": "assistant", "content": reply})
-                    
                     try: return await update.message.reply_text(reply[:4096])
                     except BadRequest: return await context.bot.send_message(chat_id=update.effective_chat.id, text=reply[:4096])
         except: continue
-        
-    try: await update.message.reply_text("Uff, mera server thoda busy hai. Ek minute baad try karna! 🥺")
+    try: await update.message.reply_text("System processing error. Try again later.")
     except: pass
 
 async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1196,7 +1164,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     replied = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
 
     if msg_lower in ["hi","hello","hey","yo","sup","hii","heyy","heya","cindy","cindrella","gm","gn"] and not mentioned and not replied:
-        await update.message.reply_text(random.choice(["System Online! 🌸", "Guild Manager here! 💕", "Hey Master! ⚔️", "Bol kya haal hain? ☀️"]))
+        await update.message.reply_text(random.choice(["System Online! 🌸","Guild Manager reporting! 💕","Hey Master! ⚔️","Dungeon ready when you are! ☀️"]))
     elif mentioned or replied:
         await ai_reply(update, context)
 
