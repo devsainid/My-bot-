@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Give Shadows + Shadow Names in Stats + Owner Max Shadows)
+# bot.py - CINDRELLA final (Give Shadows + Shadow Names in Stats + Owner Max Shadows + Updated Moderation)
 import os
 import logging
 import json
@@ -151,17 +151,21 @@ async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         except: return None
     return None
 
+# --- UPDATED MODERATION PERMISSIONS LOGIC ---
 async def check_rights(update: Update, action: str) -> bool:
     user, chat = update.effective_user, update.effective_chat
-    if user.id in admins_db: return True
+    # Bot Admin Override - Sab kuch use kar sakte hain
+    if user.id in admins_db: return True 
     if chat.type == "private": return False
+    
     try:
         member = await chat.get_member(user.id)
         if isinstance(member, ChatMemberOwner): return True
         if isinstance(member, ChatMemberAdministrator):
+            # Group Admins ke rights unki permission ke hisaab se check honge
             if action in ["ban", "kick", "mute", "unban", "unmute", "warn", "unwarn"]: return member.can_restrict_members
             if action in ["pin", "unpin"]: return member.can_pin_messages
-            if action in ["purge", "purgegroup", "filter", "blacklist", "rules"]: return member.can_delete_messages
+            if action in ["purge", "purgegroup", "purgeall", "filter", "blacklist", "rules"]: return member.can_delete_messages
             if action in ["promote", "demote"]: return member.can_promote_members
         return False
     except: return False
@@ -327,7 +331,7 @@ async def open_loot_box(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(f"🧰 <b>Opening S-Rank Loot Box...</b>\n\n✨ <b>JACKPOT!</b> ✨\nYou found <b>{exp_win} EXP</b> and <b>{cryst_win} Magic Crystals</b> 🔮!", parse_mode="HTML")
 
-# --- INTERACTIVE GIVE COMMAND (WITH SHADOWS) ---
+# --- INTERACTIVE GIVE COMMAND ---
 async def give_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     sender = update.effective_user
@@ -403,7 +407,7 @@ async def world_top_global(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sorted_hunters = sorted(hunter_db.items(), key=lambda x: x[1]["exp"], reverse=True)[:10]
     if not sorted_hunters: return await update.message.reply_text("The world is empty. No hunters found.")
         
-    text = "🌍 <b>WORLD TOP 10 S-RANK HUNTERS</b> 🌍\n\n"
+     text = "🌍 <b>WORLD TOP 10 S-RANK HUNTERS</b> 🌍\n\n"
     for i, (uid, h) in enumerate(sorted_hunters, 1):
         level, rank = get_hunter_stats(h["exp"], uid)
         text += f"<b>{i}.</b> {str(h['name']).replace('<','&lt;')}{' '+h.get('username') if h.get('username') else ''} - Lvl {level} ({rank})\n"
@@ -700,11 +704,12 @@ async def dungeon_button_handler(update: Update, context: ContextTypes.DEFAULT_T
                 await query.edit_message_reply_markup(reply_markup=markup)
             except: pass
 
-# ------------- MODERATION COMMANDS -------------
+# ------------- UPDATED MODERATION COMMANDS -------------
 async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     action = update.message.text.split()[0][1:].split('@')[0].lower()
-    if not await check_rights(update, action): return await update.message.reply_text("❌ You don't have Admin rights to do this.")
+    if not await check_rights(update, action): return await update.message.reply_text("❌ You don't have Admin rights/permissions to do this.")
+    
     target_id = await get_user_id(update, context)
     if not target_id and action not in ["unpin"]: return await update.message.reply_text("❌ Reply to a user or provide an ID/Username.")
     chat_id = update.effective_chat.id
@@ -735,6 +740,14 @@ async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif action == "promote":
             await context.bot.promote_chat_member(chat_id, target_id, can_manage_chat=True, can_delete_messages=True, can_manage_video_chats=True, can_restrict_members=True, can_promote_members=False, can_change_info=True, can_invite_users=True, can_pin_messages=True)
             await update.message.reply_text(f"🌟 Promoted {target_id} to Admin.")
+        elif action == "demote":
+            await context.bot.promote_chat_member(
+                chat_id, target_id, can_manage_chat=False, can_delete_messages=False, 
+                can_manage_video_chats=False, can_restrict_members=False, 
+                can_promote_members=False, can_change_info=False, 
+                can_invite_users=False, can_pin_messages=False, is_anonymous=False
+            )
+            await update.message.reply_text(f"📉 Demoted {target_id}. Unko ab wapas normal member bana diya gaya hai.")
     except BadRequest as e: await update.message.reply_text(f"❌ Error: {e.message}")
     except Exception as e: await update.message.reply_text(f"❌ System Error: {e}")
 
@@ -758,7 +771,18 @@ async def purge_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ack = await context.bot.send_message(chat_id, "✅ Group cleanup (Last 100)."); await asyncio.sleep(5); await ack.delete()
     except: await update.message.reply_text("❌ Messages too old/already deleted.")
 
-# ------------- PRO FEATURES -------------
+async def purge_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_rights(update, "purgeall"): return await update.message.reply_text("❌ Admin rights required.")
+    chat_id, curr = update.effective_chat.id, update.message.message_id
+    try:
+        # Telegram bot ek baar mein sab kuch delete nahi kar sakta, isliye loop chalayenge last 300 messages ke liye
+        msg_ids = list(range(max(1, curr - 300), curr + 1))
+        for i in range(0, len(msg_ids), 100):
+            try: await context.bot.delete_messages(chat_id, msg_ids[i:i+100])
+            except: pass
+        ack = await context.bot.send_message(chat_id, "✅ Mass Purge (Last 300 messages) complete."); await asyncio.sleep(5); await ack.delete()
+    except: await update.message.reply_text("❌ Failed to purge all.")
+
 async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = """
 🌹 **CINDRELLA COMMANDS** 🌹
@@ -777,8 +801,9 @@ async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 **🛠 Moderation:**
 `/ban`, `/unban`, `/kick`, `/mute`, `/unmute`
-`/pin`, `/unpin`, `/promote`, `/warn`, `/unwarn`
-`/purge`, `/purgegroup`
+`/pin`, `/unpin`, `/promote`, `/demote`
+`/warn`, `/unwarn`
+`/purge`, `/purgegroup`, `/purgeall`
 
 **🛡 Group Management:**
 `/addblacklist`, `/rmblacklist`, `/blocklist`
@@ -1195,7 +1220,8 @@ def main():
     application.add_handler(CommandHandler("arise", arise_shadow))
     application.add_handler(CommandHandler("open_box", open_loot_box))
 
-    mod_cmds = ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote"]
+    # All requested mod commands
+    mod_cmds = ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote", "demote"]
     application.add_handler(CommandHandler(mod_cmds, mod_action))
     
     application.add_handler(CommandHandler("warn", warn_user))
@@ -1213,6 +1239,7 @@ def main():
 
     application.add_handler(CommandHandler("purge", purge))
     application.add_handler(CommandHandler("purgegroup", purge_group))
+    application.add_handler(CommandHandler("purgeall", purge_all))
     
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
