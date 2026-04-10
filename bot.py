@@ -407,7 +407,7 @@ async def world_top_global(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sorted_hunters = sorted(hunter_db.items(), key=lambda x: x[1]["exp"], reverse=True)[:10]
     if not sorted_hunters: return await update.message.reply_text("The world is empty. No hunters found.")
         
-     text = "🌍 <b>WORLD TOP 10 S-RANK HUNTERS</b> 🌍\n\n"
+    text = "🌍 <b>WORLD TOP 10 S-RANK HUNTERS</b> 🌍\n\n"
     for i, (uid, h) in enumerate(sorted_hunters, 1):
         level, rank = get_hunter_stats(h["exp"], uid)
         text += f"<b>{i}.</b> {str(h['name']).replace('<','&lt;')}{' '+h.get('username') if h.get('username') else ''} - Lvl {level} ({rank})\n"
