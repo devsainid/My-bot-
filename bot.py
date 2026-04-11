@@ -612,7 +612,7 @@ async def clear_dungeon(update: Update, context: ContextTypes.DEFAULT_TYPE, chat
             hunter_db[uid]["crystals"] += cryst
             save_hunter(uid)
             uname = hunter_db[uid].get('username', '')
-             display_uname = uname if uname else hunter_db[uid]['name']
+            display_uname = uname if uname else hunter_db[uid]['name']
             winners_text += f"🗡️ {display_uname} <code> (+{reward} EXP, +{cryst} 🔮) </code>\n"
             
     clear_caption = f"""✅ <b>[ SYSTEM NOTIFICATION ]</b> ✅
