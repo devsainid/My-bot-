@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Give Shadows + Shadow Names in Stats + Owner Max Shadows + Updated Moderation)
+# bot.py - CINDRELLA final (Username Mod + /id Command + Give Shadows)
 import os
 import logging
 import json
@@ -140,21 +140,25 @@ def _display_name(user):
 def mention_html(user_id: int, name: str) -> str:
     return f'<a href="tg://user?id={user_id}">{name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")}</a>'
 
+# --- UPDATED GET_USER_ID (Username Support) ---
 async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | None:
     if update.message.reply_to_message: return update.message.reply_to_message.from_user.id
     if context.args:
         arg = context.args[0]
-        if re.fullmatch(r"@\w{5,}", arg):
+        if arg.startswith('@'):
+            # Search in hunter_db for the username
+            for uid, data in hunter_db.items():
+                if data.get("username", "").lower() == arg.lower():
+                    return uid
+            # Fallback for bot API resolution (often fails for normal users, but good for bots/channels)
             try: return (await context.bot.get_chat(arg)).id
             except: return None
         try: return int(arg)
         except: return None
     return None
 
-# --- UPDATED MODERATION PERMISSIONS LOGIC ---
 async def check_rights(update: Update, action: str) -> bool:
     user, chat = update.effective_user, update.effective_chat
-    # Bot Admin Override - Sab kuch use kar sakte hain
     if user.id in admins_db: return True 
     if chat.type == "private": return False
     
@@ -162,7 +166,6 @@ async def check_rights(update: Update, action: str) -> bool:
         member = await chat.get_member(user.id)
         if isinstance(member, ChatMemberOwner): return True
         if isinstance(member, ChatMemberAdministrator):
-            # Group Admins ke rights unki permission ke hisaab se check honge
             if action in ["ban", "kick", "mute", "unban", "unmute", "warn", "unwarn"]: return member.can_restrict_members
             if action in ["pin", "unpin"]: return member.can_pin_messages
             if action in ["purge", "purgegroup", "purgeall", "filter", "blacklist", "rules"]: return member.can_delete_messages
@@ -183,7 +186,6 @@ def ensure_user_registered(update: Update):
     hunter_db[user.id]["name"] = _display_name(user)
     hunter_db[user.id]["username"] = username
     
-    # OWNER MAX STATS FIX WITH SHADOWS
     if user.id == OWNER_ID: 
         hunter_db[user.id]["exp"] = 9999999
         hunter_db[user.id]["crystals"] = 9999999
@@ -195,6 +197,47 @@ def ensure_user_registered(update: Update):
         if chat.title and (chat.id not in known_groups or known_groups[chat.id] != chat.title):
             known_groups[chat.id] = chat.title
             save_group(chat.id, chat.title)
+
+# ------------- ID COMMAND -------------
+async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ensure_user_registered(update)
+    chat = update.effective_chat
+    sender = update.effective_user
+    
+    target_id = await get_user_id(update, context)
+    
+    # Determine the target name/username
+    if target_id and target_id != sender.id:
+        if target_id in hunter_db:
+            target_name = hunter_db[target_id]["name"]
+            target_uname = hunter_db[target_id]["username"]
+        elif update.message.reply_to_message:
+            target_name = _display_name(update.message.reply_to_message.from_user)
+            target_uname = f"@{update.message.reply_to_message.from_user.username}" if update.message.reply_to_message.from_user.username else "None"
+        else:
+            target_name = "User"
+            target_uname = "None"
+    else:
+        target_id = sender.id
+        target_name = _display_name(sender)
+        target_uname = f"@{sender.username}" if sender.username else "None"
+
+    # Make IDs copyable on touch
+    chat_id_str = f"<code>{chat.id}</code>"
+    user_id_str = f"<code>{target_id}</code>"
+    
+    text = f"""🔍 <b>Chat Information</b> 🔍
+
+<blockquote>👤 <b>Profile Details:</b>
+Name: {target_name}
+User ID: {user_id_str}
+Username: {target_uname}</blockquote>
+
+<blockquote>👥 <b>Group Information:</b>
+Title: {chat.title if chat.type != 'private' else 'Private Chat'}
+Chat ID: {chat_id_str}</blockquote>"""
+
+    await update.message.reply_text(text, parse_mode="HTML")
 
 # ------------- SOLO LEVELING RPG SYSTEM -------------
 def get_hunter_stats(exp, user_id=None):
@@ -569,7 +612,7 @@ async def clear_dungeon(update: Update, context: ContextTypes.DEFAULT_TYPE, chat
             hunter_db[uid]["crystals"] += cryst
             save_hunter(uid)
             uname = hunter_db[uid].get('username', '')
-            display_uname = uname if uname else hunter_db[uid]['name']
+             display_uname = uname if uname else hunter_db[uid]['name']
             winners_text += f"🗡️ {display_uname} <code> (+{reward} EXP, +{cryst} 🔮) </code>\n"
             
     clear_caption = f"""✅ <b>[ SYSTEM NOTIFICATION ]</b> ✅
@@ -704,7 +747,7 @@ async def dungeon_button_handler(update: Update, context: ContextTypes.DEFAULT_T
                 await query.edit_message_reply_markup(reply_markup=markup)
             except: pass
 
-# ------------- UPDATED MODERATION COMMANDS -------------
+# ------------- MODERATION COMMANDS -------------
 async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     action = update.message.text.split()[0][1:].split('@')[0].lower()
@@ -775,7 +818,6 @@ async def purge_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "purgeall"): return await update.message.reply_text("❌ Admin rights required.")
     chat_id, curr = update.effective_chat.id, update.message.message_id
     try:
-        # Telegram bot ek baar mein sab kuch delete nahi kar sakta, isliye loop chalayenge last 300 messages ke liye
         msg_ids = list(range(max(1, curr - 300), curr + 1))
         for i in range(0, len(msg_ids), 100):
             try: await context.bot.delete_messages(chat_id, msg_ids[i:i+100])
@@ -806,6 +848,7 @@ async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 `/purge`, `/purgegroup`, `/purgeall`
 
 **🛡 Group Management:**
+`/id` - Get info about user/chat
 `/addblacklist`, `/rmblacklist`, `/blocklist`
 `/addfilter`, `/rmfilter`, `/setrules`, `/rules`
 
@@ -820,7 +863,7 @@ async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "warn"): return await update.message.reply_text("❌ Admin rights required.")
     target_id = await get_user_id(update, context)
-    if not target_id: return await update.message.reply_text("❌ Reply to a user to warn.")
+    if not target_id: return await update.message.reply_text("❌ Reply to a user or mention username to warn.")
     chat_id = update.effective_chat.id
     try:
         target_member = await context.bot.get_chat_member(chat_id, target_id)
@@ -829,7 +872,7 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     warnings_db[chat_id][target_id] += 1
     count = warnings_db[chat_id][target_id]
-    reason = " ".join(context.args) if context.args else "No reason given."
+    reason = " ".join(context.args) if context.args and not context.args[0].startswith("@") else " ".join(context.args[1:]) if len(context.args) > 1 else "No reason given."
     if count >= 3:
         await context.bot.restrict_chat_member(chat_id, target_id, permissions=ChatPermissions(can_send_messages=False))
         warnings_db[chat_id][target_id] = 0
@@ -839,7 +882,7 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def unwarn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "unwarn"): return await update.message.reply_text("❌ Admin rights required.")
     target_id = await get_user_id(update, context)
-    if not target_id: return await update.message.reply_text("❌ Reply to a user.")
+    if not target_id: return await update.message.reply_text("❌ Reply to a user or mention username.")
     chat_id = update.effective_chat.id
     if warnings_db[chat_id][target_id] > 0:
         warnings_db[chat_id][target_id] -= 1
@@ -1199,6 +1242,7 @@ def main():
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("admin", admin_panel))
+    application.add_handler(CommandHandler("id", get_id))  # Nayi ID Command
     
     application.add_handler(CallbackQueryHandler(admin_button_handler, pattern="^(broadcast|list_groups|add_admin|remove_admin|list_admins)$"))
     application.add_handler(CallbackQueryHandler(dungeon_button_handler, pattern="^dungeon_"))
@@ -1220,7 +1264,6 @@ def main():
     application.add_handler(CommandHandler("arise", arise_shadow))
     application.add_handler(CommandHandler("open_box", open_loot_box))
 
-    # All requested mod commands
     mod_cmds = ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote", "demote"]
     application.add_handler(CommandHandler(mod_cmds, mod_action))
     
