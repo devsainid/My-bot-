@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Premium /id Command with Bios & Profile Button)
+# bot.py - CINDRELLA final (Exact /id Design + Dummy Server + Polling)
 import os
 import logging
 import json
@@ -8,6 +8,7 @@ import httpx
 import asyncio
 import time
 import urllib.parse
+import threading
 from flask import Flask
 from pymongo import MongoClient
 from telegram import (
@@ -27,13 +28,22 @@ from collections import defaultdict
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = int(os.environ.get("OWNER_ID", "6559745280"))
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 MONGO_URI = os.environ.get("MONGO_URI") 
 
 ADMIN_IDS = set(json.loads(os.environ.get("ADMIN_IDS", "[]")))
 admins_db = ADMIN_IDS.union({OWNER_ID})
 
+# --- DUMMY WEB SERVER FOR RENDER ---
 app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "🌸 CINDRELLA BOT IS AWAKE AND RUNNING! 🌸"
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port, use_reloader=False)
+# ------------------------------------
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -195,7 +205,7 @@ def ensure_user_registered(update: Update):
             known_groups[chat.id] = chat.title
             save_group(chat.id, chat.title)
 
-# ------------- UPDATED PREMIUM ID COMMAND -------------
+# ------------- UPDATED EXACT ID COMMAND -------------
 async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     chat = update.effective_chat
@@ -203,7 +213,6 @@ async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     target_id = await get_user_id(update, context)
     
-    # 1. Fetch Target Info & Real Bio
     target_bio = "System Hidden"
     target_name = "User"
     target_uname = "None"
@@ -212,20 +221,19 @@ async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_id = sender.id
 
     try:
-        # Fetching detailed chat object to get actual bio
         target_chat = await context.bot.get_chat(target_id)
         target_bio = target_chat.bio if target_chat.bio else "No bio set."
         target_name = target_chat.first_name + (f" {target_chat.last_name}" if target_chat.last_name else "")
         target_uname = f"@{target_chat.username}" if target_chat.username else "None"
     except:
-        # Fallback to local DB if API fails
         if target_id in hunter_db:
             target_name = hunter_db[target_id]["name"]
             target_uname = hunter_db[target_id]["username"] or "None"
 
-    # 2. Fetch Group Info & Description (Bio)
     group_bio = "No description available."
     group_uname = "None"
+    group_title = chat.title if chat.type != 'private' else 'Private Chat'
+    
     if chat.type != 'private':
         try:
             group_chat = await context.bot.get_chat(chat.id)
@@ -233,13 +241,12 @@ async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
             group_uname = f"@{group_chat.username}" if group_chat.username else "None"
         except: pass
     
-    # Fake DC ID calculation to make it look authentic (1 to 5)
     dc_id = (target_id % 5) + 1 
     
     chat_id_str = f"<code>{chat.id}</code>"
     user_id_str = f"<code>{target_id}</code>"
     
-    # Constructing the exact UI from the screenshot
+    # Exact structure matching the screenshot
     text = f"""🔍 <b>Chat Information</b>
 
 <blockquote>👤 <b>Profile Details:</b>
@@ -251,19 +258,17 @@ async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 <blockquote>💬 <b>Bio:</b> {target_bio} ❞</blockquote>
 
 <blockquote>👥 <b>Group Information:</b>
-├── <b>Title:</b> {chat.title if chat.type != 'private' else 'Private Chat'}
+├── <b>Title:</b> {group_title}
 ├── <b>ID:</b> {chat_id_str}
 └── <b>Username:</b> {group_uname}</blockquote>
 
 <blockquote>💬 <b>Bio:</b> {group_bio} ❞</blockquote>"""
 
-    # Adding the Inline Profile Button
     markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("👤 Profile", url=f"tg://user?id={target_id}")]
     ])
 
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=markup)
-
 
 # ------------- SOLO LEVELING RPG SYSTEM -------------
 def get_hunter_stats(exp, user_id=None):
@@ -820,6 +825,18 @@ async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except BadRequest as e: await update.message.reply_text(f"❌ Error: {e.message}")
     except Exception as e: await update.message.reply_text(f"❌ System Error: {e}")
 
+async def purge(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_rights(update, "purge"): return await update.message.reply_text("❌ Admin rights required.")
+    if not update.message.reply_to_message: return await update.message.reply_text("❌ Reply to the oldest message.")
+    try:
+        start_id, end_id, chat_id = update.message.reply_to_message.message_id, update.message.message_id, update.effective_chat.id
+        msg_ids = list(range(start_id, end_id + 1))
+        for i in range(0, len(msg_ids), 100):
+            try: await context.bot.delete_messages(chat_id, msg_ids[i:i+100])
+            except: pass 
+        ack = await context.bot.send_message(chat_id, "✅ Purge complete."); await asyncio.sleep(3); await ack.delete()
+    except Exception as e: await update.message.reply_text(f"Error: {e}")
+
 async def purge_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "purgegroup"): return await update.message.reply_text("❌ Admin rights required.")
     chat_id, curr = update.effective_chat.id, update.message.message_id
@@ -1092,39 +1109,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     ensure_user_registered(update)
     
-    # --- GIVE SHADOW CATCHER ---
-    if context.user_data.get("awaiting_give_shadow"):
-        shadow_name = update.message.text.strip()
-        target_id = context.user_data["give_target_id"]
-        target_name = context.user_data["give_target_name"]
-        
-        sender_data = hunter_db[user.id]
-        if target_id not in hunter_db:
-            hunter_db[target_id] = {"name": target_name, "username": "", "exp": 0, "last_hunt": 0, "last_daily": "", "crystals": 0, "streak": 0, "loot_boxes": 0, "shadows": [], "title": ""}
-        target_data = hunter_db[target_id]
-        
-        s_shadows = sender_data.get("shadows", [])
-        if user.id == OWNER_ID: s_shadows = ALL_SHADOWS
-            
-        matched_shadow = next((s for s in s_shadows if s.lower() == shadow_name.lower()), None)
-        
-        if not matched_shadow:
-            context.user_data.pop("awaiting_give_shadow", None)
-            context.user_data.pop("give_target_id", None)
-            return await update.message.reply_text(f"❌ Tumhare paas '{shadow_name}' naam ka koi Shadow nahi hai. Transaction cancelled.")
-            
-        if user.id != OWNER_ID:
-            sender_data["shadows"].remove(matched_shadow)
-            
-        target_data["shadows"].append(matched_shadow)
-        save_hunter(user.id)
-        save_hunter(target_id)
-        
-        context.user_data.pop("awaiting_give_shadow", None)
-        context.user_data.pop("give_target_id", None)
-        
-        return await update.message.reply_text(f"✅ **SHADOW TRANSFERRED!**\n\n🌑 You gave **{matched_shadow}** to {target_name}!", parse_mode="Markdown")
-
     # --- GIVE AMOUNT CATCHER ---
     if context.user_data.get("awaiting_give_amount"):
         amount_str = update.message.text.strip()
@@ -1305,8 +1289,11 @@ def main():
         ist = ZoneInfo("Asia/Kolkata")
         application.job_queue.run_daily(couple_daily_reset, time=dt_time(hour=1, minute=0, tzinfo=ist))
 
-    logging.info("🤖 Bot starting...")
-    application.run_webhook(listen="0.0.0.0", port=int(os.environ.get("PORT", 10000)), webhook_url=WEBHOOK_URL)
+    # Dummy server thread - Iski wajah se Render Free Tier mein error nahi aayega.
+    threading.Thread(target=run_dummy_server, daemon=True).start()
+
+    logging.info("🤖 Bot starting in POLLING mode with Dummy Server...")
+    application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
