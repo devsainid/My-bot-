@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Rate Limit Fix + Keep-Alive + Full Features)
+# bot.py - CINDRELLA final (Web Service Unblocked + Polling Fix)
 import os
 import logging
 import json
@@ -51,7 +51,12 @@ def keep_alive():
         time.sleep(300) # Ping every 5 minutes
 
 def run_dummy_server():
+    # Keep-alive thread
     threading.Thread(target=keep_alive, daemon=True).start()
+    # Flask server blocking hota hai, isliye isko disable_logging karke run karte hain
+    import logging as flask_logging
+    flask_log = logging.getLogger('werkzeug')
+    flask_log.setLevel(logging.ERROR)
     app.run(host="0.0.0.0", port=PORT, use_reloader=False)
 # ------------------------------------------------
 
@@ -1121,7 +1126,6 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 await context.bot.send_photo(chat_id=chat_id, photo=card_url, caption=final_msg)
             except: pass
 
-# --- AI REPLY (RATE LIMIT FIX) ---
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     user_id = update.effective_user.id
@@ -1131,7 +1135,6 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     system_prompt = "You are CINDRELLA, an exceptionally smart, empathetic, friendly, and highly intelligent AI assistant. Your personality is witty, natural, and helpful, much like a close friend who knows a lot. CRITICAL RULES: 1. You must strictly reply in the exact same language and script the user uses (e.g., English, Hindi script, or Hinglish). 2. Keep your responses concise (1-4 lines), natural, and highly engaging. 3. Do not sound like a robotic AI. Use emojis naturally. 4. Remember the context of the conversation and be a great conversationalist."
     
-    # Updated to prioritize stable and fast models to reduce 429 errors
     models = [
         "google/gemma-3-27b-it:free", 
         "meta-llama/llama-3.3-70b-instruct:free", 
@@ -1149,9 +1152,8 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             async with httpx.AsyncClient(timeout=20) as client:
                 res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
                 
-                # RATE LIMIT HANDLE (429 Error)
                 if res.status_code == 429:
-                    await asyncio.sleep(2) # Wait before trying next model
+                    await asyncio.sleep(2) 
                     continue
                     
                 if res.status_code == 200:
@@ -1168,7 +1170,6 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except: 
             continue
             
-    # Agar saare models fail ho jayein limit ki wajah se
     try: await update.message.reply_text("Server par thoda load hai, main ek minute mein wapas aati hoon! 🌸")
     except: pass
 
@@ -1412,7 +1413,6 @@ def main():
         ist = ZoneInfo("Asia/Kolkata")
         application.job_queue.run_daily(couple_daily_reset, time=dt_time(hour=1, minute=0, tzinfo=ist))
 
-    # Keep-Alive Thread start
     run_dummy_server()
 
     logging.info("🤖 Bot starting in POLLING mode with Dummy Server & Keep-Alive...")
