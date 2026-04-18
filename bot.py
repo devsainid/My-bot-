@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Purge Logic Fix + Memory + Anti-Lag)
+# bot.py - CINDRELLA final (Rate Limit Fix + Keep-Alive + Full Features)
 import os
 import logging
 import json
@@ -33,17 +33,27 @@ MONGO_URI = os.environ.get("MONGO_URI")
 ADMIN_IDS = set(json.loads(os.environ.get("ADMIN_IDS", "[]")))
 admins_db = ADMIN_IDS.union({OWNER_ID})
 
-# --- DUMMY WEB SERVER FOR RENDER ---
+# --- KEEP-ALIVE SERVER (Prevents Render Sleep) ---
 app = Flask(__name__)
+PORT = int(os.environ.get("PORT", 10000))
+SELF_URL = os.environ.get("RENDER_EXTERNAL_URL", f"http://localhost:{PORT}") # Fallback URL
 
 @app.route('/')
 def home():
     return "🌸 CINDRELLA BOT IS AWAKE AND RUNNING! 🌸"
 
+def keep_alive():
+    while True:
+        try:
+            httpx.get(SELF_URL)
+        except:
+            pass
+        time.sleep(300) # Ping every 5 minutes
+
 def run_dummy_server():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port, use_reloader=False)
-# ------------------------------------
+    threading.Thread(target=keep_alive, daemon=True).start()
+    app.run(host="0.0.0.0", port=PORT, use_reloader=False)
+# ------------------------------------------------
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -60,23 +70,16 @@ filters_db = defaultdict(dict)
 rules_db = {} 
 spam_tracker = defaultdict(lambda: defaultdict(list)) 
 
-# AI Chat Memory System
 chat_history_db = defaultdict(list)
-
-# NAYA: Purgeall tracker (Last 1000 messages)
 recent_messages_db = defaultdict(lambda: deque(maxlen=1000))
-
-# RPG & Global Group State
 known_groups = {} 
 chat_members_db = defaultdict(set) 
 hunter_db = {} 
 
-# --- DUNGEON SYSTEM STATE ---
 group_msg_counts = defaultdict(int)
 active_dungeons = {}
 arise_targets = {} 
 
-# MASTER LIST OF ALL SHADOWS FOR OWNER
 ALL_SHADOWS = ["Goblin Chieftain", "Direwolf Alpha", "High Orc Kargal", "Assassin Kasaka", "Giant Iron Golem", "Tank", "Tusk", "Ant King Beru", "Blood-Red Igris", "Kamish", "Bellion"]
 
 DUNGEON_RANKS = {
@@ -149,7 +152,6 @@ def save_admins():
         try: admins_col.update_one({"_id": "admin_list"}, {"$set": {"ids": list(admins_db)}}, upsert=True)
         except: pass
 
-# ---------- Helpers ----------
 def _display_name(user):
     return str(getattr(user, "first_name", None) or getattr(user, "username", None) or "User")
 
@@ -159,32 +161,26 @@ def mention_html(user_id: int, name: str) -> str:
 async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | None:
     if update.message.reply_to_message: 
         return update.message.reply_to_message.from_user.id
-        
     if context.args:
         arg = context.args[0]
         if arg.isdigit() or (arg.startswith('-') and arg[1:].isdigit()):
             return int(arg)
-            
         search_arg = arg if arg.startswith('@') else f"@{arg}"
         search_arg_lower = search_arg.lower()
-        
         for uid, data in hunter_db.items():
             uname = data.get("username", "")
             if uname and uname.lower() == search_arg_lower:
                 return uid
-                
         try:
             admins = await context.bot.get_chat_administrators(update.effective_chat.id)
             for admin in admins:
                 if admin.user.username and f"@{admin.user.username.lower()}" == search_arg_lower:
                     return admin.user.id
         except: pass
-            
         if update.message.entities:
             for entity in update.message.entities:
                 if entity.type == 'text_mention' and entity.user:
                     return entity.user.id
-
         try: 
             chat = await context.bot.get_chat(search_arg)
             return chat.id
@@ -196,7 +192,6 @@ async def check_rights(update: Update, action: str) -> bool:
     user, chat = update.effective_user, update.effective_chat
     if user.id in admins_db: return True 
     if chat.type == "private": return False
-    
     try:
         member = await chat.get_member(user.id)
         if isinstance(member, ChatMemberOwner): return True
@@ -233,7 +228,6 @@ def ensure_user_registered(update: Update):
             known_groups[chat.id] = chat.title
             save_group(chat.id, chat.title)
 
-# ------------- UPDATED EXACT ID COMMAND -------------
 async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     chat = update.effective_chat
@@ -309,7 +303,7 @@ async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=markup)
 
-# ------------- SOLO LEVELING RPG SYSTEM -------------
+# ------------- RPG SYSTEM -------------
 def get_hunter_stats(exp, user_id=None):
     if user_id == OWNER_ID: return "MAX", "🌍 National Level Hunter"
     level = (exp // 100) + 1
@@ -444,7 +438,6 @@ async def open_loot_box(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(f"🧰 <b>Opening S-Rank Loot Box...</b>\n\n✨ <b>JACKPOT!</b> ✨\nYou found <b>{exp_win} EXP</b> and <b>{cryst_win} Magic Crystals</b> 🔮!", parse_mode="HTML")
 
-# --- INTERACTIVE GIVE COMMAND ---
 async def give_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     sender = update.effective_user
@@ -500,7 +493,6 @@ async def give_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     await query.edit_message_text(f"🔢 How much **{item_names[action]}** do you want to give to {target_name}?\n\n*Type the number in the chat now:*", parse_mode="Markdown")
 
-# --- TOP HUNTER FUNCTIONS ---
 async def top_hunter_local(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     chat_id = update.effective_chat.id
@@ -526,7 +518,6 @@ async def world_top_global(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"<b>{i}.</b> {str(h['name']).replace('<','&lt;')}{' '+h.get('username') if h.get('username') else ''} - Lvl {level} ({rank})\n"
     await update.message.reply_text(text, parse_mode="HTML")
 
-# ------------- PVP SYSTEM -------------
 async def pvp_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     challenger = update.effective_user
@@ -595,7 +586,6 @@ async def pvp_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.edit_message_text(f"🏆 **DUEL FINISHED!** 🏆\n\n💥 {w_name} dominated the fight and defeated {l_name}!\n\n🏅 **{w_name}** won {pvp['bet']} EXP!")
         del active_pvps[pvp_id]
 
-# ------------- SHOP SYSTEM -------------
 async def shop_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     user = update.effective_user
@@ -641,7 +631,7 @@ async def shop_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         save_hunter(user_id)
         await query.answer(f"Purchased Title! You are now known as: {new_title}", show_alert=True)
 
-# ------------- PREMIUM RANDOM DUNGEON SYSTEM -------------
+# ------------- DUNGEON SYSTEM -------------
 async def gate_break(context: ContextTypes.DEFAULT_TYPE):
     chat_id = context.job.data
     if chat_id in active_dungeons:
@@ -865,7 +855,6 @@ async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except BadRequest as e: await update.message.reply_text(f"❌ Error: {e.message}")
     except Exception as e: await update.message.reply_text(f"❌ System Error: {e}")
 
-# --- UPDATED PURGE COMMANDS ---
 async def purge(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "purge"): return await update.message.reply_text("❌ Admin rights required.")
     if not update.message.reply_to_message: return await update.message.reply_text("❌ Reply to the oldest message to start purge.")
@@ -1132,6 +1121,7 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 await context.bot.send_photo(chat_id=chat_id, photo=card_url, caption=final_msg)
             except: pass
 
+# --- AI REPLY (RATE LIMIT FIX) ---
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     user_id = update.effective_user.id
@@ -1141,7 +1131,13 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     system_prompt = "You are CINDRELLA, an exceptionally smart, empathetic, friendly, and highly intelligent AI assistant. Your personality is witty, natural, and helpful, much like a close friend who knows a lot. CRITICAL RULES: 1. You must strictly reply in the exact same language and script the user uses (e.g., English, Hindi script, or Hinglish). 2. Keep your responses concise (1-4 lines), natural, and highly engaging. 3. Do not sound like a robotic AI. Use emojis naturally. 4. Remember the context of the conversation and be a great conversationalist."
     
-    models = ["meta-llama/llama-3.3-70b-instruct:free", "google/gemma-3-27b-it:free", "nvidia/nemotron-3-nano-30b-a3b:free", "stepfun/step-3.5-flash:free", "arcee-ai/trinity-large-preview:free"]
+    # Updated to prioritize stable and fast models to reduce 429 errors
+    models = [
+        "google/gemma-3-27b-it:free", 
+        "meta-llama/llama-3.3-70b-instruct:free", 
+        "nvidia/nemotron-3-nano-30b-a3b:free", 
+        "stepfun/step-3.5-flash:free"
+    ]
     
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(chat_history_db[user_id])
@@ -1152,6 +1148,12 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             payload = {"model": model, "messages": messages}
             async with httpx.AsyncClient(timeout=20) as client:
                 res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+                
+                # RATE LIMIT HANDLE (429 Error)
+                if res.status_code == 429:
+                    await asyncio.sleep(2) # Wait before trying next model
+                    continue
+                    
                 if res.status_code == 200:
                     reply = res.json()["choices"][0]["message"]["content"]
                     usage_count["count"] += 1
@@ -1163,8 +1165,11 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         
                     try: return await update.message.reply_text(reply[:4096])
                     except BadRequest: return await context.bot.send_message(chat_id=update.effective_chat.id, text=reply[:4096])
-        except: continue
-    try: await update.message.reply_text("System processing error. Try again later.")
+        except: 
+            continue
+            
+    # Agar saare models fail ho jayein limit ki wajah se
+    try: await update.message.reply_text("Server par thoda load hai, main ek minute mein wapas aati hoon! 🌸")
     except: pass
 
 async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1184,17 +1189,15 @@ async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def couple_daily_reset(context: ContextTypes.DEFAULT_TYPE): couples_db.clear()
 
-# ------------- CORE TEXT HANDLER (Optimized for Speed) -------------
+# ------------- CORE TEXT HANDLER -------------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     chat_id, user, msg_lower = update.effective_chat.id, update.effective_user, update.message.text.lower()
     
-    # --- TRACK MESSAGES FOR PURGEALL ---
     recent_messages_db[chat_id].append((update.message.message_id, user.id))
     
     ensure_user_registered(update)
     
-    # --- GIVE SHADOW CATCHER ---
     if context.user_data.get("awaiting_give_shadow"):
         shadow_name = update.message.text.strip()
         target_id = context.user_data["give_target_id"]
@@ -1227,7 +1230,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         return await update.message.reply_text(f"✅ **SHADOW TRANSFERRED!**\n\n🌑 You gave **{matched_shadow}** to {target_name}!", parse_mode="Markdown")
 
-    # --- GIVE AMOUNT CATCHER ---
     if context.user_data.get("awaiting_give_amount"):
         amount_str = update.message.text.strip()
         if amount_str.isdigit() and int(amount_str) > 0:
@@ -1266,7 +1268,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.pop("give_item", None)
             return await update.message.reply_text("❌ Invalid amount. Transaction cancelled.")
     
-    # DUNGEON TYPING MECHANIC
     if chat_id in active_dungeons and active_dungeons[chat_id]["type"] == 2:
         if update.message.reply_to_message and update.message.reply_to_message.message_id == active_dungeons[chat_id]["msg_id"]:
             if msg_lower == active_dungeons[chat_id]["word"].lower():
@@ -1274,7 +1275,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await clear_dungeon(update, context, chat_id, active_dungeons[chat_id]["participants"], user.id)
                 return 
 
-    # DUNGEON TRIGGER COUNTER
     if update.effective_chat.type in ["group", "supergroup"]:
         group_msg_counts[chat_id] += 1
         if group_msg_counts[chat_id] >= 30:
@@ -1282,13 +1282,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if chat_id not in active_dungeons:
                 asyncio.create_task(spawn_dungeon(update, context, chat_id))
 
-    # SECRET +5 EXP EVERY MESSAGE
     if user.id != OWNER_ID:
         hunter_db[user.id]["exp"] += 5 
         if (hunter_db[user.id]["exp"] // 5) % 5 == 0: 
             save_hunter(user.id)
 
-    # UNIVERSAL BROADCAST
     if user.id in admins_db:
         if context.user_data.pop("awaiting_broadcast", None):
             success_groups = 0
@@ -1320,7 +1318,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except: await update.message.reply_text("❌ Invalid ID.")
                 return
 
-    # --- OPTIMIZED SPAM TRACKER ---
     if user.id not in admins_db:
         now = time.time()
         spam_tracker[chat_id][user.id] = [t for t in spam_tracker[chat_id][user.id] + [now] if now - t < 5]
@@ -1415,9 +1412,10 @@ def main():
         ist = ZoneInfo("Asia/Kolkata")
         application.job_queue.run_daily(couple_daily_reset, time=dt_time(hour=1, minute=0, tzinfo=ist))
 
-    threading.Thread(target=run_dummy_server, daemon=True).start()
+    # Keep-Alive Thread start
+    run_dummy_server()
 
-    logging.info("🤖 Bot starting in POLLING mode with Dummy Server...")
+    logging.info("🤖 Bot starting in POLLING mode with Dummy Server & Keep-Alive...")
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
