@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Username Master Fix + Anti-Lag + ID Premium)
+# bot.py - CINDRELLA final (Super AI Memory + 40 Chat Context + Anti-Lag)
 import os
 import logging
 import json
@@ -59,6 +59,9 @@ blacklist_db = defaultdict(set)
 filters_db = defaultdict(dict) 
 rules_db = {} 
 spam_tracker = defaultdict(lambda: defaultdict(list)) 
+
+# NAYA: AI Chat Memory System (User ke last 40 messages yaad rakhne ke liye)
+chat_history_db = defaultdict(list)
 
 # RPG & Global Group State
 known_groups = {} 
@@ -150,52 +153,40 @@ def _display_name(user):
 def mention_html(user_id: int, name: str) -> str:
     return f'<a href="tg://user?id={user_id}">{name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")}</a>'
 
-# --- 4-LAYER BULLETPROOF GET_USER_ID (Username Master Fix) ---
 async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | None:
-    # 1. Reply Message (Highest Priority)
     if update.message.reply_to_message: 
         return update.message.reply_to_message.from_user.id
         
-    # 2. Check Arguments (Username or Numeric ID)
     if context.args:
         arg = context.args[0]
-        
-        # Check if direct ID was provided
         if arg.isdigit() or (arg.startswith('-') and arg[1:].isdigit()):
             return int(arg)
             
-        # Format the username for search
         search_arg = arg if arg.startswith('@') else f"@{arg}"
         search_arg_lower = search_arg.lower()
         
-        # Layer 1: Search in Bot's Hunter Database
         for uid, data in hunter_db.items():
             uname = data.get("username", "")
             if uname and uname.lower() == search_arg_lower:
                 return uid
                 
-        # Layer 2: Check Chat Administrators (Perfect for finding other Bots like ClonyMusicBot)
         try:
             admins = await context.bot.get_chat_administrators(update.effective_chat.id)
             for admin in admins:
                 if admin.user.username and f"@{admin.user.username.lower()}" == search_arg_lower:
                     return admin.user.id
-        except:
-            pass
+        except: pass
             
-        # Layer 3: Hidden Text Mentions (If a user used mention format)
         if update.message.entities:
             for entity in update.message.entities:
                 if entity.type == 'text_mention' and entity.user:
                     return entity.user.id
 
-        # Layer 4: Global Telegram API Fallback
         try: 
             chat = await context.bot.get_chat(search_arg)
             return chat.id
         except: 
             return None
-            
     return None
 
 async def check_rights(update: Update, action: str) -> bool:
@@ -239,7 +230,7 @@ def ensure_user_registered(update: Update):
             known_groups[chat.id] = chat.title
             save_group(chat.id, chat.title)
 
-# ------------- UPDATED EXACT ID COMMAND -------------
+# ------------- ID COMMAND -------------
 async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     chat = update.effective_chat
@@ -1088,7 +1079,7 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     admin_text += f"🔹 Unknown Hunter (`{aid}`)\n"
         await query.message.reply_text(admin_text, parse_mode="Markdown")
 
-# ------------- AI & WELCOME -------------
+# ------------- AI SYSTEM (WITH MEMORY) -------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text("Hey, I'm CINDRELLA 🌹—your AI Assistant!\nType /commands to see what I can do!", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -1125,21 +1116,36 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
+    user_id = update.effective_user.id
+    
     if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
     
-    system_prompt = "You are CINDRELLA, an exceptionally smart, friendly, and highly intelligent AI assistant. Your primary goal is to provide accurate, engaging, and helpful answers. CRITICAL RULE: You must strictly reply in the exact same language the user uses. If they type in English, reply in English. If they type in Hindi script, reply in Hindi. If they type in Hinglish (Hindi written in English alphabet), reply in Hinglish. Keep your responses concise (1-3 lines), natural, and conversational. Do not act like a robotic AI; be a great, smart conversationalist."
+    # NAYA: Jabardast System Prompt
+    system_prompt = "You are CINDRELLA, an exceptionally smart, empathetic, friendly, and highly intelligent AI assistant. Your personality is witty, natural, and helpful, much like a close friend who knows a lot. CRITICAL RULES: 1. You must strictly reply in the exact same language and script the user uses (e.g., English, Hindi script, or Hinglish). 2. Keep your responses concise (1-4 lines), natural, and highly engaging. 3. Do not sound like a robotic AI. Use emojis naturally. 4. Remember the context of the conversation and be a great conversationalist."
     
     models = ["meta-llama/llama-3.3-70b-instruct:free", "google/gemma-3-27b-it:free", "nvidia/nemotron-3-nano-30b-a3b:free", "stepfun/step-3.5-flash:free", "arcee-ai/trinity-large-preview:free"]
     
+    # NAYA: Build Message List with 40-Message Memory
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(chat_history_db[user_id])
+    messages.append({"role": "user", "content": message_text})
+    
     for model in models:
         try:
-            payload = {"model": model, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": message_text}]}
+            payload = {"model": model, "messages": messages}
             async with httpx.AsyncClient(timeout=20) as client:
                 res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
                 if res.status_code == 200:
                     reply = res.json()["choices"][0]["message"]["content"]
                     usage_count["count"] += 1
+                    
+                    # NAYA: Update History (Save context and keep it max 40 length)
+                    chat_history_db[user_id].append({"role": "user", "content": message_text})
+                    chat_history_db[user_id].append({"role": "assistant", "content": reply})
+                    if len(chat_history_db[user_id]) > 40:
+                        chat_history_db[user_id] = chat_history_db[user_id][-40:]
+                        
                     try: return await update.message.reply_text(reply[:4096])
                     except BadRequest: return await context.bot.send_message(chat_id=update.effective_chat.id, text=reply[:4096])
         except: continue
@@ -1296,7 +1302,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except: await update.message.reply_text("❌ Invalid ID.")
                 return
 
-    # --- OPTIMIZED SPAM TRACKER (FIXED API LOOP) ---
+    # --- OPTIMIZED SPAM TRACKER ---
     if user.id not in admins_db:
         now = time.time()
         spam_tracker[chat_id][user.id] = [t for t in spam_tracker[chat_id][user.id] + [now] if now - t < 5]
