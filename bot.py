@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Exact /id Design + Dummy Server + Polling)
+# bot.py - CINDRELLA final (Anti-Lag + Spam Loop Fix + Dummy Server)
 import os
 import logging
 import json
@@ -205,7 +205,7 @@ def ensure_user_registered(update: Update):
             known_groups[chat.id] = chat.title
             save_group(chat.id, chat.title)
 
-# ------------- UPDATED EXACT ID COMMAND -------------
+# ------------- ID COMMAND -------------
 async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     chat = update.effective_chat
@@ -246,7 +246,6 @@ async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id_str = f"<code>{chat.id}</code>"
     user_id_str = f"<code>{target_id}</code>"
     
-    # Exact structure matching the screenshot
     text = f"""🔍 <b>Chat Information</b>
 
 <blockquote>👤 <b>Profile Details:</b>
@@ -1102,13 +1101,46 @@ async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def couple_daily_reset(context: ContextTypes.DEFAULT_TYPE): couples_db.clear()
 
-# ------------- CORE TEXT HANDLER -------------
+# ------------- CORE TEXT HANDLER (Optimized for Speed) -------------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     chat_id, user, msg_lower = update.effective_chat.id, update.effective_user, update.message.text.lower()
     
     ensure_user_registered(update)
     
+    # --- GIVE SHADOW CATCHER ---
+    if context.user_data.get("awaiting_give_shadow"):
+        shadow_name = update.message.text.strip()
+        target_id = context.user_data["give_target_id"]
+        target_name = context.user_data["give_target_name"]
+        
+        sender_data = hunter_db[user.id]
+        if target_id not in hunter_db:
+            hunter_db[target_id] = {"name": target_name, "username": "", "exp": 0, "last_hunt": 0, "last_daily": "", "crystals": 0, "streak": 0, "loot_boxes": 0, "shadows": [], "title": ""}
+        target_data = hunter_db[target_id]
+        
+        s_shadows = sender_data.get("shadows", [])
+        if user.id == OWNER_ID: s_shadows = ALL_SHADOWS
+            
+        matched_shadow = next((s for s in s_shadows if s.lower() == shadow_name.lower()), None)
+        
+        if not matched_shadow:
+            context.user_data.pop("awaiting_give_shadow", None)
+            context.user_data.pop("give_target_id", None)
+            return await update.message.reply_text(f"❌ Tumhare paas '{shadow_name}' naam ka koi Shadow nahi hai. Transaction cancelled.")
+            
+        if user.id != OWNER_ID:
+            sender_data["shadows"].remove(matched_shadow)
+            
+        target_data["shadows"].append(matched_shadow)
+        save_hunter(user.id)
+        save_hunter(target_id)
+        
+        context.user_data.pop("awaiting_give_shadow", None)
+        context.user_data.pop("give_target_id", None)
+        
+        return await update.message.reply_text(f"✅ **SHADOW TRANSFERRED!**\n\n🌑 You gave **{matched_shadow}** to {target_name}!", parse_mode="Markdown")
+
     # --- GIVE AMOUNT CATCHER ---
     if context.user_data.get("awaiting_give_amount"):
         amount_str = update.message.text.strip()
@@ -1202,20 +1234,29 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except: await update.message.reply_text("❌ Invalid ID.")
                 return
 
-    if not await check_rights(update, "warn"):
+    # --- OPTIMIZED SPAM TRACKER (FIXED API LOOP) ---
+    if user.id not in admins_db:
         now = time.time()
         spam_tracker[chat_id][user.id] = [t for t in spam_tracker[chat_id][user.id] + [now] if now - t < 5]
+        
         if len(spam_tracker[chat_id][user.id]) > 5:
+            # TURANT TRACKER KHALI KARO TAKI LOOP NA BANE!
+            spam_tracker[chat_id][user.id] = []
             try:
                 await update.message.delete()
                 await context.bot.restrict_chat_member(chat_id, user.id, permissions=ChatPermissions(can_send_messages=False))
-                return await context.bot.send_message(chat_id, f"🚫 {_display_name(user)} muted for spamming.")
-            except: pass
+                await context.bot.send_message(chat_id, f"🚫 {_display_name(user)} muted for spamming.")
+            except: 
+                pass # Agar admin hai toh error ignore karega
+            return # Faltu API calls se bachne ke liye return kar do
+            
         if any(word in msg_lower for word in blacklist_db[chat_id]):
             try:
                 await update.message.delete()
-                return await context.bot.send_message(chat_id, f"🚫 Watch your language, {_display_name(user)}!")
-            except: pass
+                await context.bot.send_message(chat_id, f"🚫 Watch your language, {_display_name(user)}!")
+            except: 
+                pass
+            return # Blocked word hai toh aage process nahi karna
 
     if user.id in afk_db:
         afk_db.pop(user.id); await update.message.reply_text(f"👋 Welcome back {_display_name(user)}, AFK removed!")
