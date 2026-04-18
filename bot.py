@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Bulletproof Moderation via Username/ID/Reply + Anti-Lag)
+# bot.py - CINDRELLA final (Username Master Fix + Anti-Lag + ID Premium)
 import os
 import logging
 import json
@@ -150,31 +150,46 @@ def _display_name(user):
 def mention_html(user_id: int, name: str) -> str:
     return f'<a href="tg://user?id={user_id}">{name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")}</a>'
 
-# --- BUG-FREE & BULLETPROOF GET_USER_ID ---
+# --- 4-LAYER BULLETPROOF GET_USER_ID (Username Master Fix) ---
 async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | None:
-    # Method 1: Reply Message (Highest Priority)
+    # 1. Reply Message (Highest Priority)
     if update.message.reply_to_message: 
         return update.message.reply_to_message.from_user.id
         
-    # Method 2: Checking Arguments (Username or Numeric ID)
+    # 2. Check Arguments (Username or Numeric ID)
     if context.args:
         arg = context.args[0]
         
-        # Agar direct number bheja hai (ID)
+        # Check if direct ID was provided
         if arg.isdigit() or (arg.startswith('-') and arg[1:].isdigit()):
             return int(arg)
             
-        # Agar Username bheja hai (with or without @)
+        # Format the username for search
         search_arg = arg if arg.startswith('@') else f"@{arg}"
         search_arg_lower = search_arg.lower()
         
-        # Step 2A: Search in Database
+        # Layer 1: Search in Bot's Hunter Database
         for uid, data in hunter_db.items():
             uname = data.get("username", "")
             if uname and uname.lower() == search_arg_lower:
                 return uid
                 
-        # Step 2B: Fallback to Telegram API 
+        # Layer 2: Check Chat Administrators (Perfect for finding other Bots like ClonyMusicBot)
+        try:
+            admins = await context.bot.get_chat_administrators(update.effective_chat.id)
+            for admin in admins:
+                if admin.user.username and f"@{admin.user.username.lower()}" == search_arg_lower:
+                    return admin.user.id
+        except:
+            pass
+            
+        # Layer 3: Hidden Text Mentions (If a user used mention format)
+        if update.message.entities:
+            for entity in update.message.entities:
+                if entity.type == 'text_mention' and entity.user:
+                    return entity.user.id
+
+        # Layer 4: Global Telegram API Fallback
         try: 
             chat = await context.bot.get_chat(search_arg)
             return chat.id
@@ -935,10 +950,8 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     warnings_db[chat_id][target_id] += 1
     count = warnings_db[chat_id][target_id]
     
-    # Reason fixing logic
     reason_args = context.args
     if reason_args and not update.message.reply_to_message:
-        # Puraane code mein hum direct indexing le rahe the jo galat thi. Ab hum 1st word ko skip karenge (kyunki wo username ya ID hoga)
         reason_args = reason_args[1:] 
     reason = " ".join(reason_args) if reason_args else "No reason given."
     
@@ -1150,7 +1163,7 @@ async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def couple_daily_reset(context: ContextTypes.DEFAULT_TYPE): couples_db.clear()
 
-# ------------- CORE TEXT HANDLER (Optimized for Speed) -------------
+# ------------- CORE TEXT HANDLER -------------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     chat_id, user, msg_lower = update.effective_chat.id, update.effective_user, update.message.text.lower()
@@ -1289,7 +1302,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         spam_tracker[chat_id][user.id] = [t for t in spam_tracker[chat_id][user.id] + [now] if now - t < 5]
         
         if len(spam_tracker[chat_id][user.id]) > 5:
-            # TURANT TRACKER KHALI KARO TAKI LOOP NA BANE!
             spam_tracker[chat_id][user.id] = []
             try:
                 await update.message.delete()
