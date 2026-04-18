@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Anti-Lag + Spam Loop Fix + Dummy Server)
+# bot.py - CINDRELLA final (Bulletproof Moderation via Username/ID/Reply + Anti-Lag)
 import os
 import logging
 import json
@@ -150,18 +150,37 @@ def _display_name(user):
 def mention_html(user_id: int, name: str) -> str:
     return f'<a href="tg://user?id={user_id}">{name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")}</a>'
 
+# --- BUG-FREE & BULLETPROOF GET_USER_ID ---
 async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | None:
-    if update.message.reply_to_message: return update.message.reply_to_message.from_user.id
+    # Method 1: Reply Message (Highest Priority)
+    if update.message.reply_to_message: 
+        return update.message.reply_to_message.from_user.id
+        
+    # Method 2: Checking Arguments (Username or Numeric ID)
     if context.args:
         arg = context.args[0]
-        if arg.startswith('@'):
-            for uid, data in hunter_db.items():
-                if data.get("username", "").lower() == arg.lower():
-                    return uid
-            try: return (await context.bot.get_chat(arg)).id
-            except: return None
-        try: return int(arg)
-        except: return None
+        
+        # Agar direct number bheja hai (ID)
+        if arg.isdigit() or (arg.startswith('-') and arg[1:].isdigit()):
+            return int(arg)
+            
+        # Agar Username bheja hai (with or without @)
+        search_arg = arg if arg.startswith('@') else f"@{arg}"
+        search_arg_lower = search_arg.lower()
+        
+        # Step 2A: Search in Database
+        for uid, data in hunter_db.items():
+            uname = data.get("username", "")
+            if uname and uname.lower() == search_arg_lower:
+                return uid
+                
+        # Step 2B: Fallback to Telegram API 
+        try: 
+            chat = await context.bot.get_chat(search_arg)
+            return chat.id
+        except: 
+            return None
+            
     return None
 
 async def check_rights(update: Update, action: str) -> bool:
@@ -205,20 +224,29 @@ def ensure_user_registered(update: Update):
             known_groups[chat.id] = chat.title
             save_group(chat.id, chat.title)
 
-# ------------- ID COMMAND -------------
+# ------------- UPDATED EXACT ID COMMAND -------------
 async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     chat = update.effective_chat
     sender = update.effective_user
     
-    target_id = await get_user_id(update, context)
-    
-    target_bio = "System Hidden"
-    target_name = "User"
-    target_uname = "None"
-    
-    if not target_id:
+    target_id = None
+    target_user_obj = None
+
+    if update.message.reply_to_message:
+        target_user_obj = update.message.reply_to_message.from_user
+        target_id = target_user_obj.id
+    elif context.args:
+        target_id = await get_user_id(update, context)
+        if not target_id:
+            return await update.message.reply_text("❌ System Error: User not found! Unhone group mein koi message nahi kiya hai, ya fir username galat hai.")
+    else:
         target_id = sender.id
+        target_user_obj = sender
+
+    target_bio = "System Hidden"
+    target_name = "Unknown Hunter"
+    target_uname = "None"
 
     try:
         target_chat = await context.bot.get_chat(target_id)
@@ -226,7 +254,10 @@ async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_name = target_chat.first_name + (f" {target_chat.last_name}" if target_chat.last_name else "")
         target_uname = f"@{target_chat.username}" if target_chat.username else "None"
     except:
-        if target_id in hunter_db:
+        if target_user_obj:
+            target_name = _display_name(target_user_obj)
+            target_uname = f"@{target_user_obj.username}" if target_user_obj.username else "None"
+        elif target_id in hunter_db:
             target_name = hunter_db[target_id]["name"]
             target_uname = hunter_db[target_id]["username"] or "None"
 
@@ -784,7 +815,8 @@ async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, action): return await update.message.reply_text("❌ You don't have Admin rights/permissions to do this.")
     
     target_id = await get_user_id(update, context)
-    if not target_id and action not in ["unpin"]: return await update.message.reply_text("❌ Reply to a user or provide an ID/Username.")
+    if not target_id and action not in ["unpin"]: 
+        return await update.message.reply_text("❌ User not found! Reply to their message, or provide a valid ID/Username.")
     chat_id = update.effective_chat.id
 
     try:
@@ -893,7 +925,7 @@ async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "warn"): return await update.message.reply_text("❌ Admin rights required.")
     target_id = await get_user_id(update, context)
-    if not target_id: return await update.message.reply_text("❌ Reply to a user or mention username to warn.")
+    if not target_id: return await update.message.reply_text("❌ User not found! Reply to their message, or provide a valid ID/Username.")
     chat_id = update.effective_chat.id
     try:
         target_member = await context.bot.get_chat_member(chat_id, target_id)
@@ -902,7 +934,14 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     warnings_db[chat_id][target_id] += 1
     count = warnings_db[chat_id][target_id]
-    reason = " ".join(context.args) if context.args and not context.args[0].startswith("@") else " ".join(context.args[1:]) if len(context.args) > 1 else "No reason given."
+    
+    # Reason fixing logic
+    reason_args = context.args
+    if reason_args and not update.message.reply_to_message:
+        # Puraane code mein hum direct indexing le rahe the jo galat thi. Ab hum 1st word ko skip karenge (kyunki wo username ya ID hoga)
+        reason_args = reason_args[1:] 
+    reason = " ".join(reason_args) if reason_args else "No reason given."
+    
     if count >= 3:
         await context.bot.restrict_chat_member(chat_id, target_id, permissions=ChatPermissions(can_send_messages=False))
         warnings_db[chat_id][target_id] = 0
@@ -912,7 +951,7 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def unwarn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "unwarn"): return await update.message.reply_text("❌ Admin rights required.")
     target_id = await get_user_id(update, context)
-    if not target_id: return await update.message.reply_text("❌ Reply to a user or mention username.")
+    if not target_id: return await update.message.reply_text("❌ User not found! Reply to their message, or provide a valid ID/Username.")
     chat_id = update.effective_chat.id
     if warnings_db[chat_id][target_id] > 0:
         warnings_db[chat_id][target_id] -= 1
@@ -1049,6 +1088,16 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
     for member in update.message.new_chat_members:
         if not member.is_bot:
             username = f"@{member.username}" if member.username else "No Username"
+            
+            if member.id not in hunter_db:
+                hunter_db[member.id] = {
+                    "name": _display_name(member), "username": username if member.username else "",
+                    "exp": 0, "last_hunt": 0, "last_daily": "", "crystals": 0, "streak": 0, 
+                    "loot_boxes": 0, "shadows": [], "title": ""
+                }
+            chat_members_db[chat_id].add(member.id)
+            save_hunter(member.id)
+
             final_msg = random.choice(WELCOME_MESSAGES).format(name=_display_name(member)) + f"\n🆔 UserID: {member.id}\n👤 Username: {username}\n📜 Bio: System Hidden"
             try:
                 safe_name = urllib.parse.quote(_display_name(member))
@@ -1247,8 +1296,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.restrict_chat_member(chat_id, user.id, permissions=ChatPermissions(can_send_messages=False))
                 await context.bot.send_message(chat_id, f"🚫 {_display_name(user)} muted for spamming.")
             except: 
-                pass # Agar admin hai toh error ignore karega
-            return # Faltu API calls se bachne ke liye return kar do
+                pass 
+            return 
             
         if any(word in msg_lower for word in blacklist_db[chat_id]):
             try:
@@ -1256,7 +1305,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_message(chat_id, f"🚫 Watch your language, {_display_name(user)}!")
             except: 
                 pass
-            return # Blocked word hai toh aage process nahi karna
+            return 
 
     if user.id in afk_db:
         afk_db.pop(user.id); await update.message.reply_text(f"👋 Welcome back {_display_name(user)}, AFK removed!")
@@ -1330,7 +1379,6 @@ def main():
         ist = ZoneInfo("Asia/Kolkata")
         application.job_queue.run_daily(couple_daily_reset, time=dt_time(hour=1, minute=0, tzinfo=ist))
 
-    # Dummy server thread - Iski wajah se Render Free Tier mein error nahi aayega.
     threading.Thread(target=run_dummy_server, daemon=True).start()
 
     logging.info("🤖 Bot starting in POLLING mode with Dummy Server...")
