@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Super AI Memory + 40 Chat Context + Anti-Lag)
+# bot.py - CINDRELLA final (Purge Logic Fix + Memory + Anti-Lag)
 import os
 import logging
 import json
@@ -22,7 +22,7 @@ from telegram.ext import (
 from telegram.error import BadRequest
 from datetime import date, datetime as dt, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
-from collections import defaultdict
+from collections import defaultdict, deque
 
 # ----------------- CONFIG -----------------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -60,8 +60,11 @@ filters_db = defaultdict(dict)
 rules_db = {} 
 spam_tracker = defaultdict(lambda: defaultdict(list)) 
 
-# NAYA: AI Chat Memory System (User ke last 40 messages yaad rakhne ke liye)
+# AI Chat Memory System
 chat_history_db = defaultdict(list)
+
+# NAYA: Purgeall tracker (Last 1000 messages)
+recent_messages_db = defaultdict(lambda: deque(maxlen=1000))
 
 # RPG & Global Group State
 known_groups = {} 
@@ -230,7 +233,7 @@ def ensure_user_registered(update: Update):
             known_groups[chat.id] = chat.title
             save_group(chat.id, chat.title)
 
-# ------------- ID COMMAND -------------
+# ------------- UPDATED EXACT ID COMMAND -------------
 async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     chat = update.effective_chat
@@ -862,9 +865,10 @@ async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except BadRequest as e: await update.message.reply_text(f"❌ Error: {e.message}")
     except Exception as e: await update.message.reply_text(f"❌ System Error: {e}")
 
+# --- UPDATED PURGE COMMANDS ---
 async def purge(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "purge"): return await update.message.reply_text("❌ Admin rights required.")
-    if not update.message.reply_to_message: return await update.message.reply_text("❌ Reply to the oldest message.")
+    if not update.message.reply_to_message: return await update.message.reply_text("❌ Reply to the oldest message to start purge.")
     try:
         start_id, end_id, chat_id = update.message.reply_to_message.message_id, update.message.message_id, update.effective_chat.id
         msg_ids = list(range(start_id, end_id + 1))
@@ -878,20 +882,35 @@ async def purge_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "purgegroup"): return await update.message.reply_text("❌ Admin rights required.")
     chat_id, curr = update.effective_chat.id, update.message.message_id
     try:
-        await context.bot.delete_messages(chat_id, list(range(curr - 100, curr + 1)))
-        ack = await context.bot.send_message(chat_id, "✅ Group cleanup (Last 100)."); await asyncio.sleep(5); await ack.delete()
+        msg_ids = list(range(max(1, curr - 100), curr + 1))
+        for i in range(0, len(msg_ids), 100):
+            try: await context.bot.delete_messages(chat_id, msg_ids[i:i+100])
+            except: pass
+        ack = await context.bot.send_message(chat_id, "✅ Group cleanup (Last 100 messages) complete."); await asyncio.sleep(5); await ack.delete()
     except: await update.message.reply_text("❌ Messages too old/already deleted.")
 
 async def purge_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rights(update, "purgeall"): return await update.message.reply_text("❌ Admin rights required.")
-    chat_id, curr = update.effective_chat.id, update.message.message_id
+    if not update.message.reply_to_message: return await update.message.reply_text("❌ Reply to the user whose messages you want to purge.")
+    
+    chat_id = update.effective_chat.id
+    target_id = update.message.reply_to_message.from_user.id
+    
     try:
-        msg_ids = list(range(max(1, curr - 300), curr + 1))
-        for i in range(0, len(msg_ids), 100):
-            try: await context.bot.delete_messages(chat_id, msg_ids[i:i+100])
+        msg_ids_to_delete = [mid for mid, uid in recent_messages_db[chat_id] if uid == target_id]
+        msg_ids_to_delete.append(update.message.message_id) 
+        
+        if not msg_ids_to_delete or len(msg_ids_to_delete) <= 1:
+            return await update.message.reply_text("❌ Is user ke koi recent messages history mein nahi mile.")
+            
+        for i in range(0, len(msg_ids_to_delete), 100):
+            try: await context.bot.delete_messages(chat_id, msg_ids_to_delete[i:i+100])
             except: pass
-        ack = await context.bot.send_message(chat_id, "✅ Mass Purge (Last 300 messages) complete."); await asyncio.sleep(5); await ack.delete()
-    except: await update.message.reply_text("❌ Failed to purge all.")
+            
+        recent_messages_db[chat_id] = deque([(m, u) for m, u in recent_messages_db[chat_id] if u != target_id], maxlen=1000)
+        
+        ack = await context.bot.send_message(chat_id, f"✅ User ke sabhi recent messages delete ho gaye."); await asyncio.sleep(5); await ack.delete()
+    except Exception as e: await update.message.reply_text(f"❌ Failed to purge all: {e}")
 
 async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = """
@@ -1079,7 +1098,6 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     admin_text += f"🔹 Unknown Hunter (`{aid}`)\n"
         await query.message.reply_text(admin_text, parse_mode="Markdown")
 
-# ------------- AI SYSTEM (WITH MEMORY) -------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text("Hey, I'm CINDRELLA 🌹—your AI Assistant!\nType /commands to see what I can do!", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -1121,12 +1139,10 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
     
-    # NAYA: Jabardast System Prompt
     system_prompt = "You are CINDRELLA, an exceptionally smart, empathetic, friendly, and highly intelligent AI assistant. Your personality is witty, natural, and helpful, much like a close friend who knows a lot. CRITICAL RULES: 1. You must strictly reply in the exact same language and script the user uses (e.g., English, Hindi script, or Hinglish). 2. Keep your responses concise (1-4 lines), natural, and highly engaging. 3. Do not sound like a robotic AI. Use emojis naturally. 4. Remember the context of the conversation and be a great conversationalist."
     
     models = ["meta-llama/llama-3.3-70b-instruct:free", "google/gemma-3-27b-it:free", "nvidia/nemotron-3-nano-30b-a3b:free", "stepfun/step-3.5-flash:free", "arcee-ai/trinity-large-preview:free"]
     
-    # NAYA: Build Message List with 40-Message Memory
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(chat_history_db[user_id])
     messages.append({"role": "user", "content": message_text})
@@ -1140,7 +1156,6 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply = res.json()["choices"][0]["message"]["content"]
                     usage_count["count"] += 1
                     
-                    # NAYA: Update History (Save context and keep it max 40 length)
                     chat_history_db[user_id].append({"role": "user", "content": message_text})
                     chat_history_db[user_id].append({"role": "assistant", "content": reply})
                     if len(chat_history_db[user_id]) > 40:
@@ -1169,10 +1184,13 @@ async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def couple_daily_reset(context: ContextTypes.DEFAULT_TYPE): couples_db.clear()
 
-# ------------- CORE TEXT HANDLER -------------
+# ------------- CORE TEXT HANDLER (Optimized for Speed) -------------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     chat_id, user, msg_lower = update.effective_chat.id, update.effective_user, update.message.text.lower()
+    
+    # --- TRACK MESSAGES FOR PURGEALL ---
+    recent_messages_db[chat_id].append((update.message.message_id, user.id))
     
     ensure_user_registered(update)
     
