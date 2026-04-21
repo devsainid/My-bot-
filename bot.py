@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Flask Removed + Built-in Server + Anti-Lag + Memory)
+# bot.py - CINDRELLA final (Emoji Syntax Error Fixed + Built-in Server + Memory)
 import os
 import logging
 import json
@@ -37,9 +37,10 @@ admins_db = ADMIN_IDS.union({OWNER_ID})
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
-        self.send_header('Content-type', 'text/html')
+        self.send_header('Content-type', 'text/html; charset=utf-8')
         self.end_headers()
-        self.wfile.write(b"🌸 CINDRELLA BOT IS AWAKE AND RUNNING! 🌸")
+        # ERROR FIXED HERE: Used .encode('utf-8') instead of b"..."
+        self.wfile.write("🌸 CINDRELLA BOT IS AWAKE AND RUNNING! 🌸".encode('utf-8'))
     
     def log_message(self, format, *args):
         pass # Faltu logs hide karne ke liye
@@ -1413,11 +1414,9 @@ def main():
         ist = ZoneInfo("Asia/Kolkata")
         application.job_queue.run_daily(couple_daily_reset, time=dt_time(hour=1, minute=0, tzinfo=ist))
 
-    # Yahan naye server aur keep-alive ke threads start honge bina interrupt kiye
     threading.Thread(target=run_dummy_server, daemon=True).start()
-    threading.Thread(target=keep_alive, daemon=True).start()
 
-    logging.info("🤖 Bot starting in POLLING mode without Flask conflicts...")
+    logging.info("🤖 Bot starting in POLLING mode without server conflicts...")
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
