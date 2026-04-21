@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Web Service Unblocked + Polling Fix)
+# bot.py - CINDRELLA final (Flask Removed + Built-in Server + Anti-Lag + Memory)
 import os
 import logging
 import json
@@ -9,7 +9,7 @@ import asyncio
 import time
 import urllib.parse
 import threading
-from flask import Flask
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pymongo import MongoClient
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
@@ -33,32 +33,32 @@ MONGO_URI = os.environ.get("MONGO_URI")
 ADMIN_IDS = set(json.loads(os.environ.get("ADMIN_IDS", "[]")))
 admins_db = ADMIN_IDS.union({OWNER_ID})
 
-# --- KEEP-ALIVE SERVER (Prevents Render Sleep) ---
-app = Flask(__name__)
-PORT = int(os.environ.get("PORT", 10000))
-SELF_URL = os.environ.get("RENDER_EXTERNAL_URL", f"http://localhost:{PORT}") # Fallback URL
-
-@app.route('/')
-def home():
-    return "🌸 CINDRELLA BOT IS AWAKE AND RUNNING! 🌸"
-
-def keep_alive():
-    while True:
-        try:
-            httpx.get(SELF_URL)
-        except:
-            pass
-        time.sleep(300) # Ping every 5 minutes
+# --- BUILT-IN DUMMY SERVER (NO FLASK) ---
+class DummyHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        self.wfile.write(b"🌸 CINDRELLA BOT IS AWAKE AND RUNNING! 🌸")
+    
+    def log_message(self, format, *args):
+        pass # Faltu logs hide karne ke liye
 
 def run_dummy_server():
-    # Keep-alive thread
-    threading.Thread(target=keep_alive, daemon=True).start()
-    # Flask server blocking hota hai, isliye isko disable_logging karke run karte hain
-    import logging as flask_logging
-    flask_log = logging.getLogger('werkzeug')
-    flask_log.setLevel(logging.ERROR)
-    app.run(host="0.0.0.0", port=PORT, use_reloader=False)
-# ------------------------------------------------
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), DummyHandler)
+    server.serve_forever()
+
+def keep_alive():
+    # Render URL ya Fallback URL
+    url = os.environ.get("RENDER_EXTERNAL_URL") or os.environ.get("WEBHOOK_URL") or f"http://localhost:{os.environ.get('PORT', 10000)}"
+    while True:
+        time.sleep(300) # Har 5 minute mein ping
+        try:
+            httpx.get(url, timeout=5)
+        except:
+            pass
+# ----------------------------------------
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -1413,9 +1413,11 @@ def main():
         ist = ZoneInfo("Asia/Kolkata")
         application.job_queue.run_daily(couple_daily_reset, time=dt_time(hour=1, minute=0, tzinfo=ist))
 
-    run_dummy_server()
+    # Yahan naye server aur keep-alive ke threads start honge bina interrupt kiye
+    threading.Thread(target=run_dummy_server, daemon=True).start()
+    threading.Thread(target=keep_alive, daemon=True).start()
 
-    logging.info("🤖 Bot starting in POLLING mode with Dummy Server & Keep-Alive...")
+    logging.info("🤖 Bot starting in POLLING mode without Flask conflicts...")
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
