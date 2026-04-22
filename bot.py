@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Premium Emoji Engine + Bold + Polling)
+# bot.py - CINDRELLA final (Ultimate Premium Aesthetic + Emojis + AI Memory)
 import os
 import logging
 import json
@@ -35,38 +35,95 @@ MONGO_URI = os.environ.get("MONGO_URI")
 ADMIN_IDS = set(json.loads(os.environ.get("ADMIN_IDS", "[]")))
 admins_db = ADMIN_IDS.union({OWNER_ID})
 
-# --- PREMIUM EMOJI ENGINE ---
-# Yeh dictionary AI ke standard text/emojis ko tumhare custom IDs mein convert karegi.
+# --- ULTIMATE PREMIUM EMOJI ENGINE ---
 EMOJI_MAP = {
-    "🌸": '<tg-emoji emoji-id="5361957543079844962">🌸</tg-emoji>',
-    "❤️": '<tg-emoji emoji-id="5362081079224180363">❤️</tg-emoji>',
+    "🙂": '<tg-emoji emoji-id="5361811943688512595">🙂</tg-emoji>',
     "🥺": '<tg-emoji emoji-id="5359556488857659527">🥺</tg-emoji>',
-    "✨": '<tg-emoji emoji-id="5362085090723633936">✨</tg-emoji>',
-    "🎀": '<tg-emoji emoji-id="5359335109063353153">🎀</tg-emoji>',
-    "🦋": '<tg-emoji emoji-id="5361866446823497727">🦋</tg-emoji>',
-    "💖": '<tg-emoji emoji-id="5361698629566341740">💖</tg-emoji>',
-    "💗": '<tg-emoji emoji-id="5362027963363632114">💗</tg-emoji>',
-    "💕": '<tg-emoji emoji-id="5359477766402090098">💕</tg-emoji>',
-    "😊": '<tg-emoji emoji-id="5359619088005997893">😊</tg-emoji>',
-    "🥰": '<tg-emoji emoji-id="5359703393919050005">🥰</tg-emoji>',
-    "😭": '<tg-emoji emoji-id="5361688841335872649">😭</tg-emoji>',
-    "🔥": '<tg-emoji emoji-id="5359528850743108099">🔥</tg-emoji>',
-    "😂": '<tg-emoji emoji-id="5362088045661135278">🤣</tg-emoji>', # mapped to rofl for aesthetic pack
-    "🤣": '<tg-emoji emoji-id="5362088045661135278">🤣</tg-emoji>',
+    "❤️": '<tg-emoji emoji-id="5362081079224180363">❤️</tg-emoji>',
     "👍": '<tg-emoji emoji-id="5361840191688417691">👍</tg-emoji>',
-    "✅": '<tg-emoji emoji-id="5361693153483037923">✅</tg-emoji>',
+    "😈": '<tg-emoji emoji-id="5361977209735094094">😈</tg-emoji>',
+    "😢": '<tg-emoji emoji-id="5361967838116453579">😢</tg-emoji>',
+    "🤩": '<tg-emoji emoji-id="5359823764672489041">🤩</tg-emoji>',
+    "😊": '<tg-emoji emoji-id="5359619088005997893">😊</tg-emoji>',
+    "😘": '<tg-emoji emoji-id="5361870050301057412">😘</tg-emoji>',
+    "🫣": '<tg-emoji emoji-id="5362088337718909649">🫣</tg-emoji>',
+    "🐰": '<tg-emoji emoji-id="5361584138623132120">🐰</tg-emoji>',
+    "💃": '<tg-emoji emoji-id="5361979846845014099">💃</tg-emoji>',
+    "😠": '<tg-emoji emoji-id="5361727491746570163">😠</tg-emoji>',
+    "😭": '<tg-emoji emoji-id="5361688841335872649">😭</tg-emoji>',
+    "👻": '<tg-emoji emoji-id="5359348960332882020">👻</tg-emoji>',
+    "🕊️": '<tg-emoji emoji-id="5361953187983006321">🕊️</tg-emoji>',
+    "☺️": '<tg-emoji emoji-id="5359295840177366796">☺️</tg-emoji>',
+    "💓": '<tg-emoji emoji-id="5361744791874837044">💓</tg-emoji>',
+    "🦄": '<tg-emoji emoji-id="5361682407474863210">🦄</tg-emoji>',
+    "🤪": '<tg-emoji emoji-id="5361979593441942591">🤪</tg-emoji>',
+    "💗": '<tg-emoji emoji-id="5362027963363632114">💗</tg-emoji>',
+    "💖": '<tg-emoji emoji-id="5361698629566341740">💖</tg-emoji>',
+    "🥰": '<tg-emoji emoji-id="5359703393919050005">🥰</tg-emoji>',
+    "💕": '<tg-emoji emoji-id="5359477766402090098">💕</tg-emoji>',
+    "🧸": '<tg-emoji emoji-id="5361897482257177939">🧸</tg-emoji>',
+    "✨": '<tg-emoji emoji-id="5362085090723633936">✨</tg-emoji>',
+    "😴": '<tg-emoji emoji-id="5359720835781240886">😴</tg-emoji>',
+    "❤️‍🩹": '<tg-emoji emoji-id="5362080112856538764">❤️‍🩹</tg-emoji>',
+    "🤔": '<tg-emoji emoji-id="5359369473096688455">🤔</tg-emoji>',
+    "🤗": '<tg-emoji emoji-id="5363789578559823865">🤗</tg-emoji>',
+    "😌": '<tg-emoji emoji-id="5359306977027564797">😌</tg-emoji>',
+    "⭐️": '<tg-emoji emoji-id="5359686514697576863">⭐️</tg-emoji>',
+    "👑": '<tg-emoji emoji-id="5359686514697576863">⭐️</tg-emoji>', # mapped to star
+    "😏": '<tg-emoji emoji-id="5361728020027547890">😏</tg-emoji>',
+    "💎": '<tg-emoji emoji-id="5361662345682623608">💎</tg-emoji>',
+    "🔮": '<tg-emoji emoji-id="5361662345682623608">💎</tg-emoji>', # mapped to gem
+    "🔪": '<tg-emoji emoji-id="5361627281569620072">🔪</tg-emoji>',
+    "🔨": '<tg-emoji emoji-id="5361627281569620072">🔪</tg-emoji>', # mapped to knife
+    "🗡️": '<tg-emoji emoji-id="5361627281569620072">🔪</tg-emoji>', 
+    "💉": '<tg-emoji emoji-id="5361717162350223774">💉</tg-emoji>',
+    "🌺": '<tg-emoji emoji-id="5359370357859951786">🌺</tg-emoji>',
+    "🎂": '<tg-emoji emoji-id="5362086280429577357">🎂</tg-emoji>',
+    "🦋": '<tg-emoji emoji-id="5361866446823497727">🦋</tg-emoji>',
+    "💦": '<tg-emoji emoji-id="5361909619834755990">💦</tg-emoji>',
+    "🕹️": '<tg-emoji emoji-id="5361902593268259979">🕹️</tg-emoji>',
+    "🛡️": '<tg-emoji emoji-id="5361902593268259979">🕹️</tg-emoji>', # mapped to joystick
+    "🌈": '<tg-emoji emoji-id="5362079172258702306">🌈</tg-emoji>',
+    "🤷‍♀️": '<tg-emoji emoji-id="5361754519975763173">🤷‍♀️</tg-emoji>',
+    "🎀": '<tg-emoji emoji-id="5359335109063353153">🎀</tg-emoji>',
+    "👀": '<tg-emoji emoji-id="5364188447877635731">👀</tg-emoji>',
+    "🌸": '<tg-emoji emoji-id="5361957543079844962">🌸</tg-emoji>',
+    "🐾": '<tg-emoji emoji-id="5361929222065494120">🐾</tg-emoji>',
+    "👼": '<tg-emoji emoji-id="5359446911357035515">👼</tg-emoji>',
+    "😜": '<tg-emoji emoji-id="5361537400789016060">😜</tg-emoji>',
+    "☕️": '<tg-emoji emoji-id="5361703414159908977">☕️</tg-emoji>',
+    "🌍": '<tg-emoji emoji-id="5359642014541423992">🌍</tg-emoji>',
+    "💍": '<tg-emoji emoji-id="5362082384894237683">💍</tg-emoji>',
+    "💋": '<tg-emoji emoji-id="5361621298680175398">💋</tg-emoji>',
+    "🐱": '<tg-emoji emoji-id="5361566000976240609">🐱</tg-emoji>',
+    "💔": '<tg-emoji emoji-id="5361978408030968361">💔</tg-emoji>',
+    "🔇": '<tg-emoji emoji-id="5361874933678876634">🔇</tg-emoji>',
+    "⏳": '<tg-emoji emoji-id="5361812489149360115">⏳</tg-emoji>',
+    "🚀": '<tg-emoji emoji-id="5362036733686848529">🚀</tg-emoji>',
+    "👎": '<tg-emoji emoji-id="5362061288014880649">👎</tg-emoji>',
+    "💸": '<tg-emoji emoji-id="5359523546458496837">💸</tg-emoji>',
+    "💰": '<tg-emoji emoji-id="5361866171945592038">💰</tg-emoji>',
+    "💌": '<tg-emoji emoji-id="5359778766300128093">💌</tg-emoji>',
     "❌": '<tg-emoji emoji-id="5361977776670779271">❌</tg-emoji>',
-    "⚠️": '<tg-emoji emoji-id="5361683000180351007">⚠️</tg-emoji>',
-    "👑": '<tg-emoji emoji-id="5359686514697576863">⭐️</tg-emoji>', # using star as crown substitute if needed
-    "🤍": '<tg-emoji emoji-id="5362081079224180363">❤️</tg-emoji>', # fallback to pink/red heart
+    "✅": '<tg-emoji emoji-id="5361693153483037923">✅</tg-emoji>',
+    "📌": '<tg-emoji emoji-id="5361918188294512147">📌</tg-emoji>',
+    "🤡": '<tg-emoji emoji-id="5361775402106756924">🤡</tg-emoji>',
+    "🤣": '<tg-emoji emoji-id="5362088045661135278">🤣</tg-emoji>',
+    "😂": '<tg-emoji emoji-id="5362088045661135278">🤣</tg-emoji>', # mapped
+    "☠️": '<tg-emoji emoji-id="5361981590601735641">☠️</tg-emoji>',
+    "🙏": '<tg-emoji emoji-id="5361727818164083480">🙏</tg-emoji>',
+    "🎉": '<tg-emoji emoji-id="5361775092869112132">🎉</tg-emoji>',
+    "❓": '<tg-emoji emoji-id="5359808302790222953">❓</tg-emoji>',
+    "🤍": '<tg-emoji emoji-id="5362081079224180363">❤️</tg-emoji>',
     "🩷": '<tg-emoji emoji-id="5362027963363632114">💗</tg-emoji>',
-    "😅": '<tg-emoji emoji-id="5361761572312064436">😊</tg-emoji>'
+    "😅": '<tg-emoji emoji-id="5361761572312064436">😊</tg-emoji>',
+    "💯": '<tg-emoji emoji-id="5362085090723633936">✨</tg-emoji>'
 }
 
-def inject_premium_emojis(text):
-    """Replaces standard emojis with custom Telegram Premium emoji tags."""
-    for standard_emoji, premium_tag in EMOJI_MAP.items():
-        text = text.replace(standard_emoji, premium_tag)
+def premium(text):
+    """Replaces standard emojis with custom Telegram Premium aesthetic tags."""
+    for std, prem in EMOJI_MAP.items():
+        text = text.replace(std, prem)
     return text
 
 # --- BUILT-IN DUMMY SERVER (NO FLASK) ---
@@ -76,9 +133,8 @@ class DummyHandler(BaseHTTPRequestHandler):
         self.send_header('Content-type', 'text/html; charset=utf-8')
         self.end_headers()
         self.wfile.write("🌸 CINDRELLA BOT IS AWAKE AND RUNNING! 🌸".encode('utf-8'))
-    
     def log_message(self, format, *args):
-        pass
+        pass 
 
 def run_dummy_server():
     port = int(os.environ.get("PORT", 10000))
@@ -89,16 +145,11 @@ def keep_alive():
     url = os.environ.get("RENDER_EXTERNAL_URL") or os.environ.get("WEBHOOK_URL") or f"http://localhost:{os.environ.get('PORT', 10000)}"
     while True:
         time.sleep(300)
-        try:
-            httpx.get(url, timeout=5)
-        except:
-            pass
+        try: httpx.get(url, timeout=5)
+        except: pass
 # ----------------------------------------
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 # ----------------- STATE -----------------
 usage_count = {"date": str(date.today()), "count": 0}
@@ -109,13 +160,11 @@ blacklist_db = defaultdict(set)
 filters_db = defaultdict(dict) 
 rules_db = {} 
 spam_tracker = defaultdict(lambda: defaultdict(list)) 
-
 chat_history_db = defaultdict(list)
 recent_messages_db = defaultdict(lambda: deque(maxlen=1000))
 known_groups = {} 
 chat_members_db = defaultdict(set) 
 hunter_db = {} 
-
 group_msg_counts = defaultdict(int)
 active_dungeons = {}
 arise_targets = {} 
@@ -135,9 +184,10 @@ DUNGEON_WORDS = ["ARISE", "SMASH", "KILL", "WAKE UP", "FIGHT", "DEFEND"]
 active_pvps = {}
 
 WELCOME_MESSAGES = [
-    "Welcome {name}! ✨ Glad you're here — have fun!",
-    "Hey {name} 👋 — nice to see you! Introduce yourself 😄",
-    "A lovely hello to {name} 🌸 — welcome to the fam!"
+    "<b>Welcome to the aesthetic side, {name}! ✨\nWe are so happy to have you here, make yourself at home! 🎀</b>",
+    "<b>Hey {name}! 🌸 Step into our world!\nDrop a 'hi' and let's get this party started! 🦋</b>",
+    "<b>A lovely hello to {name}! 💕\nGrab a seat, relax, and enjoy the premium vibes! ☕️</b>",
+    "<b>Look who just joined us! {name} is here! 🤩\nGet ready for some fun and good times! 🎉💖</b>"
 ]
 WELCOME_BG_URL = "https://images.unsplash.com/photo-1519608487953-e999c86e7455?w=1200"
 
@@ -282,7 +332,7 @@ async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif context.args:
         target_id = await get_user_id(update, context)
         if not target_id:
-            return await update.message.reply_text("❌ System Error: User not found! Unhone group mein koi message nahi kiya hai, ya fir username galat hai.")
+            return await update.message.reply_text(premium("<b>❌ System Error:</b> User not found! Reply to a message or check the username. ✨"), parse_mode="HTML")
     else:
         target_id = sender.id
         target_user_obj = sender
@@ -337,11 +387,8 @@ async def get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 <blockquote>💬 <b>Bio:</b> {group_bio} ❞</blockquote>"""
 
-    markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("👤 Profile", url=f"tg://user?id={target_id}")]
-    ])
-
-    await update.message.reply_text(text, parse_mode="HTML", reply_markup=markup)
+    markup = InlineKeyboardMarkup([[InlineKeyboardButton("👤 Profile", url=f"tg://user?id={target_id}")]])
+    await update.message.reply_text(premium(text), parse_mode="HTML", reply_markup=markup)
 
 # ------------- RPG SYSTEM -------------
 def get_hunter_stats(exp, user_id=None):
@@ -394,7 +441,7 @@ async def hunter_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🔥 <b>Daily Streak:</b> {data.get('streak', 0)} Days
 🧰 <b>Loot Boxes:</b> {loot_disp}"""
 
-    await update.message.reply_text(text, parse_mode="HTML")
+    await update.message.reply_text(premium(text), parse_mode="HTML")
 
 async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
@@ -403,7 +450,7 @@ async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if now - data["last_hunt"] < 3600: 
         m, s = divmod(int(3600 - (now - data["last_hunt"])), 60)
-        return await update.message.reply_text(f"⏳ Dungeon portal closed! Wait {m}m {s}s to hunt again. (Use /shop to buy a Dungeon Key!)")
+        return await update.message.reply_text(premium(f"<b>⏳ Dungeon portal closed!</b>\nWait {m}m {s}s to hunt again. ✨"), parse_mode="HTML")
     
     data["last_hunt"] = now
     shadow_bonus = len(data.get("shadows", [])) * 5
@@ -427,7 +474,8 @@ async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_hunter(user.id)
     level, rank = get_hunter_stats(data["exp"], user.id)
     shadow_text = f" (Shadow Bonus: +{shadow_bonus})" if shadow_bonus > 0 and exp_gain > 0 else ""
-    await update.message.reply_text(f"⛩️ **Dungeon Raid Results:**\n\n{event}\n⚡ **EXP:** {exp_gain}{shadow_text} | 🔮 **Crystals:** {cryst_gain}\n📊 **Total EXP:** {data['exp'] if level != 'MAX' else '∞'} | **Level:** {level}")
+    text = f"<b>⛩️ Dungeon Raid Results:</b>\n\n{event} ✨\n⚡ <b>EXP:</b> {exp_gain}{shadow_text} | 🔮 <b>Crystals:</b> {cryst_gain}\n📊 <b>Total EXP:</b> {data['exp'] if level != 'MAX' else '∞'} | <b>Level:</b> {level}"
+    await update.message.reply_text(premium(text), parse_mode="HTML")
 
 async def daily_quest(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
@@ -438,7 +486,7 @@ async def daily_quest(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     data = hunter_db[user.id]
     if data["last_daily"] == today:
-        return await update.message.reply_text("⏳ System: Daily Quest already completed! Next quest unlocks at 1:00 AM IST.")
+        return await update.message.reply_text(premium("<b>⏳ Daily Quest already completed!</b> Next quest unlocks at 1:00 AM IST. 🌸"), parse_mode="HTML")
         
     if data["last_daily"] == yesterday: data["streak"] = data.get("streak", 0) + 1
     else: data["streak"] = 1
@@ -448,14 +496,15 @@ async def daily_quest(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data["exp"] += 150
         data["crystals"] += 20
         
-    streak_msg = f"🔥 Streak: Day {data['streak']}!"
+    streak_msg = f"🔥 <b>Streak:</b> Day {data['streak']}!"
     if data["streak"] % 7 == 0:
         data["loot_boxes"] += 1
-        streak_msg += "\n🎁 **7-DAY REWARD: You received an S-Rank Loot Box! (Use /open_box)**"
+        streak_msg += "\n🎁 <b>7-DAY REWARD: You received an S-Rank Loot Box! (/open_box)</b>"
     
     save_hunter(user.id)
     level, rank = get_hunter_stats(data["exp"], user.id)
-    await update.message.reply_text(f"🏋️‍♂️ **Daily Quest Completed!**\n100 Pushups, 100 Situps, 10km Run!\n\n🌟 +150 EXP | 🔮 +20 Crystals\n{streak_msg}\n📊 Current Level: {level}")
+    text = f"<b>🏋️‍♂️ Daily Quest Completed!</b>\n100 Pushups, 100 Situps, 10km Run! 💦\n\n🌟 +150 EXP | 🔮 +20 Crystals\n{streak_msg}\n📊 <b>Current Level:</b> {level}"
+    await update.message.reply_text(premium(text), parse_mode="HTML")
 
 async def open_loot_box(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
@@ -463,7 +512,7 @@ async def open_loot_box(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = hunter_db[user.id]
     
     if data.get("loot_boxes", 0) <= 0 and user.id != OWNER_ID: 
-        return await update.message.reply_text("❌ You don't have any S-Rank Loot Boxes. Complete a 7-day /daily streak to get one!")
+        return await update.message.reply_text(premium("<b>❌ You don't have any S-Rank Loot Boxes.</b> Complete a 7-day /daily streak to get one! ✨"), parse_mode="HTML")
         
     if user.id != OWNER_ID:
         data["loot_boxes"] -= 1
@@ -476,17 +525,18 @@ async def open_loot_box(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data["crystals"] += cryst_win
     save_hunter(user.id)
     
-    await update.message.reply_text(f"🧰 <b>Opening S-Rank Loot Box...</b>\n\n✨ <b>JACKPOT!</b> ✨\nYou found <b>{exp_win} EXP</b> and <b>{cryst_win} Magic Crystals</b> 🔮!", parse_mode="HTML")
+    text = f"<b>🧰 Opening S-Rank Loot Box...</b>\n\n✨ <b>JACKPOT!</b> ✨\nYou found <b>{exp_win} EXP</b> and <b>{cryst_win} Magic Crystals</b> 🔮!"
+    await update.message.reply_text(premium(text), parse_mode="HTML")
 
 async def give_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     sender = update.effective_user
     
     if not update.message.reply_to_message: 
-        return await update.message.reply_text("❌ Reply to a Hunter's message and type `/give` to send items.")
+        return await update.message.reply_text(premium("<b>❌ Reply to a Hunter's message</b> and type `/give` to send items. 🌸"), parse_mode="HTML")
     target = update.message.reply_to_message.from_user
     if sender.id == target.id: 
-        return await update.message.reply_text("❌ You cannot give items to yourself!")
+        return await update.message.reply_text(premium("<b>❌ You cannot give items to yourself!</b> 🤡"), parse_mode="HTML")
         
     context.user_data["give_target_id"] = target.id
     context.user_data["give_target_name"] = _display_name(target)
@@ -496,7 +546,7 @@ async def give_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🧰 Give Loot Box", callback_data="give_lootbox"), InlineKeyboardButton("👥 Give Shadow", callback_data="give_shadow")],
         [InlineKeyboardButton("❌ Cancel", callback_data="give_cancel")]
     ])
-    await update.message.reply_text(f"🎁 What would you like to give to **{_display_name(target)}**?", parse_mode="Markdown", reply_markup=markup)
+    await update.message.reply_text(premium(f"<b>🎁 What would you like to give to {_display_name(target)}?</b> ✨"), parse_mode="HTML", reply_markup=markup)
 
 async def give_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -508,7 +558,7 @@ async def give_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data.pop("give_item", None)
         context.user_data.pop("awaiting_give_amount", None)
         context.user_data.pop("awaiting_give_shadow", None)
-        return await query.edit_message_text("❌ Transaction Cancelled.")
+        return await query.edit_message_text(premium("<b>❌ Transaction Cancelled.</b> ✨"), parse_mode="HTML")
         
     target_id = context.user_data.get("give_target_id")
     if not target_id:
@@ -523,57 +573,57 @@ async def give_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         if not s_shadows:
             return await query.answer("You don't have any Shadow Soldiers to give!", show_alert=True)
             
-        shadow_list = "\n".join([f"🌑 `{s}`" for s in set(s_shadows)])
+        shadow_list = "\n".join([f"🌑 <code>{s}</code>" for s in set(s_shadows)])
         context.user_data["awaiting_give_shadow"] = True
-        return await query.edit_message_text(f"👥 **Your Shadow Soldiers:**\n{shadow_list}\n\n*Type the EXACT name of the Shadow you want to give to {target_name}:*", parse_mode="Markdown")
+        return await query.edit_message_text(premium(f"<b>👥 Your Shadow Soldiers:</b>\n{shadow_list}\n\n<i>Type the EXACT name of the Shadow you want to give to {target_name}:</i> ✨"), parse_mode="HTML")
 
     item_names = {"exp": "EXP ⚡", "crystals": "Magic Crystals 🔮", "lootbox": "S-Rank Loot Boxes 🧰"}
     context.user_data["give_item"] = action
     context.user_data["awaiting_give_amount"] = True
     
-    await query.edit_message_text(f"🔢 How much **{item_names[action]}** do you want to give to {target_name}?\n\n*Type the number in the chat now:*", parse_mode="Markdown")
+    await query.edit_message_text(premium(f"<b>🔢 How much {item_names[action]} do you want to give to {target_name}?</b>\n\n<i>Type the number in the chat now:</i> 🌸"), parse_mode="HTML")
 
 async def top_hunter_local(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     chat_id = update.effective_chat.id
     members = chat_members_db.get(chat_id, set())
     sorted_hunters = sorted([uid for uid in members if uid in hunter_db], key=lambda x: hunter_db[x]["exp"], reverse=True)[:10]
-    if not sorted_hunters: return await update.message.reply_text("No active hunters in this guild.")
+    if not sorted_hunters: return await update.message.reply_text(premium("<b>No active hunters in this guild.</b> 🌸"), parse_mode="HTML")
         
-    text = "🏆 <b>TOP 10 GUILD HUNTERS</b> 🏆\n\n"
+    text = "<b>🏆 TOP 10 GUILD HUNTERS 🏆</b>\n\n"
     for i, uid in enumerate(sorted_hunters, 1):
         h = hunter_db[uid]
         level, rank = get_hunter_stats(h["exp"], uid)
         text += f"<b>{i}.</b> {str(h['name']).replace('<','&lt;')}{' '+h.get('username') if h.get('username') else ''} - Lvl {level} ({rank})\n"
-    await update.message.reply_text(text, parse_mode="HTML")
+    await update.message.reply_text(premium(text), parse_mode="HTML")
 
 async def world_top_global(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     sorted_hunters = sorted(hunter_db.items(), key=lambda x: x[1]["exp"], reverse=True)[:10]
-    if not sorted_hunters: return await update.message.reply_text("The world is empty. No hunters found.")
+    if not sorted_hunters: return await update.message.reply_text(premium("<b>The world is empty. No hunters found.</b> 🌸"), parse_mode="HTML")
         
-    text = "🌍 <b>WORLD TOP 10 S-RANK HUNTERS</b> 🌍\n\n"
+    text = "<b>🌍 WORLD TOP 10 S-RANK HUNTERS 🌍</b>\n\n"
     for i, (uid, h) in enumerate(sorted_hunters, 1):
         level, rank = get_hunter_stats(h["exp"], uid)
         text += f"<b>{i}.</b> {str(h['name']).replace('<','&lt;')}{' '+h.get('username') if h.get('username') else ''} - Lvl {level} ({rank})\n"
-    await update.message.reply_text(text, parse_mode="HTML")
+    await update.message.reply_text(premium(text), parse_mode="HTML")
 
 async def pvp_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user_registered(update)
     challenger = update.effective_user
     chat_id = update.effective_chat.id
     
-    if not update.message.reply_to_message: return await update.message.reply_text("❌ Reply to the Hunter you want to duel with: `/pvp <amount>`")
+    if not update.message.reply_to_message: return await update.message.reply_text(premium("<b>❌ Reply to the Hunter you want to duel with:</b> `/pvp <amount>` ⚔️"), parse_mode="HTML")
     opponent = update.message.reply_to_message.from_user
     
-    if challenger.id == opponent.id or opponent.is_bot: return await update.message.reply_text("❌ System error: Invalid target for duel.")
-    if not context.args or not context.args[0].isdigit(): return await update.message.reply_text("❌ Correct format: `/pvp <amount>`")
+    if challenger.id == opponent.id or opponent.is_bot: return await update.message.reply_text(premium("<b>❌ System error: Invalid target for duel.</b> 🤡"), parse_mode="HTML")
+    if not context.args or not context.args[0].isdigit(): return await update.message.reply_text(premium("<b>❌ Correct format:</b> `/pvp <amount>` 🌸"), parse_mode="HTML")
         
     bet = int(context.args[0])
-    if bet < 10: return await update.message.reply_text("❌ Minimum bet is 10 EXP.")
+    if bet < 10: return await update.message.reply_text(premium("<b>❌ Minimum bet is 10 EXP.</b> ✨"), parse_mode="HTML")
     
     c_data = hunter_db[challenger.id]
-    if c_data["exp"] < bet and challenger.id != OWNER_ID: return await update.message.reply_text(f"❌ You don't have enough EXP! (You have {c_data['exp']})")
+    if c_data["exp"] < bet and challenger.id != OWNER_ID: return await update.message.reply_text(premium(f"<b>❌ You don't have enough EXP!</b> (You have {c_data['exp']}) 🥺"), parse_mode="HTML")
         
     pvp_id = f"{chat_id}_{challenger.id}_{opponent.id}_{int(time.time())}"
     active_pvps[pvp_id] = {"c_id": challenger.id, "o_id": opponent.id, "bet": bet, "c_name": _display_name(challenger), "o_name": _display_name(opponent)}
@@ -582,10 +632,8 @@ async def pvp_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("⚔️ ACCEPT", callback_data=f"pvp_accept_{pvp_id}"), InlineKeyboardButton("🏃 DECLINE", callback_data=f"pvp_decline_{pvp_id}")]
     ])
     
-    await update.message.reply_text(
-        f"⚠️ **[ DUEL REQUEST ]** ⚠️\n\n{mention_html(challenger.id, _display_name(challenger))} challenged {mention_html(opponent.id, _display_name(opponent))}!\n💰 **Bet:** {bet} EXP\n\nDo you accept the duel?",
-        parse_mode="HTML", reply_markup=markup
-    )
+    text = f"<b>⚠️ [ DUEL REQUEST ] ⚠️</b>\n\n{mention_html(challenger.id, _display_name(challenger))} challenged {mention_html(opponent.id, _display_name(opponent))}!\n💰 <b>Bet:</b> {bet} EXP\n\nDo you accept the duel? ✨"
+    await update.message.reply_text(premium(text), parse_mode="HTML", reply_markup=markup)
 
 async def pvp_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -599,13 +647,13 @@ async def pvp_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if user_id != pvp["o_id"] and user_id != pvp["c_id"]: return await query.answer("This duel is not for you!", show_alert=True)
     if action == "decline" and user_id == pvp["o_id"]:
         del active_pvps[pvp_id]
-        return await query.edit_message_text(f"🏃 {pvp['o_name']} declined the duel. Coward!")
+        return await query.edit_message_text(premium(f"<b>🏃 {pvp['o_name']} declined the duel. Coward!</b> 😂"), parse_mode="HTML")
     
     if action == "accept" and user_id == pvp["o_id"]:
         if hunter_db[pvp["o_id"]]["exp"] < pvp["bet"] and pvp["o_id"] != OWNER_ID:
             return await query.answer("You don't have enough EXP to accept!", show_alert=True)
             
-        await query.edit_message_text(f"⚔️ **DUEL STARTED!**\n{pvp['c_name']} VS {pvp['o_name']}\n\n*Clashing weapons...*")
+        await query.edit_message_text(premium(f"<b>⚔️ DUEL STARTED!</b>\n{pvp['c_name']} VS {pvp['o_name']}\n\n<i>Clashing weapons...</i> 🔥"), parse_mode="HTML")
         await asyncio.sleep(1.5)
         
         c_lvl, _ = get_hunter_stats(hunter_db[pvp["c_id"]]["exp"], pvp["c_id"])
@@ -623,7 +671,8 @@ async def pvp_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         w_name = hunter_db[winner_id]["name"]
         l_name = hunter_db[loser_id]["name"]
         
-        await query.edit_message_text(f"🏆 **DUEL FINISHED!** 🏆\n\n💥 {w_name} dominated the fight and defeated {l_name}!\n\n🏅 **{w_name}** won {pvp['bet']} EXP!")
+        text = f"<b>🏆 DUEL FINISHED! 🏆</b>\n\n💥 {w_name} dominated the fight and defeated {l_name}!\n\n🏅 <b>{w_name}</b> won {pvp['bet']} EXP! 🎉"
+        await query.edit_message_text(premium(text), parse_mode="HTML")
         del active_pvps[pvp_id]
 
 async def shop_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -636,7 +685,7 @@ async def shop_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🗝️ Dungeon Key (100 🔮) - Reset /hunt cooldown", callback_data="shop_key")],
         [InlineKeyboardButton("👑 Custom Title (500 🔮) - Add profile title", callback_data="shop_title")]
     ])
-    await update.message.reply_text(f"🛒 **SYSTEM SHOP** 🛒\n\n🔮 **Your Magic Crystals:** {cryst if user.id != OWNER_ID else '∞'}\n\nBuy items to aid your journey:", reply_markup=markup)
+    await update.message.reply_text(premium(f"<b>🛒 SYSTEM SHOP 🛒</b>\n\n🔮 <b>Your Magic Crystals:</b> {cryst if user.id != OWNER_ID else '∞'}\n\n<i>Buy items to aid your journey:</i> ✨"), reply_markup=markup, parse_mode="HTML")
 
 async def shop_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -684,16 +733,16 @@ async def gate_break(context: ContextTypes.DEFAULT_TYPE):
                 save_hunter(uid)
                 affected += 1
                 
-        break_caption = f"""💀 <b>[ SYSTEM WARNING ]</b> 💀
+        break_caption = premium(f"""<b>💀 [ SYSTEM WARNING ] 💀</b>
 <i>Hunters failed to clear the dungeon in time...</i>
 
 💠 <b>STATUS:</b> ⚫ <b>GATE BREAK (FAILED)</b>
 ⛩️ <b>GATE RANK:</b> <code> {dungeon['rank']}-Rank </code>
-👹 <b>BOSS NAME:</b> <code> {DUNGEON_RANKS[dungeon['rank']]['name']} (ESCAPED) </code>"""
+👹 <b>BOSS NAME:</b> <code> {DUNGEON_RANKS[dungeon['rank']]['name']} (ESCAPED) </code> ⚠️""")
         
         try:
             await context.bot.edit_message_caption(chat_id=chat_id, message_id=dungeon["msg_id"], caption=break_caption, parse_mode="HTML")
-            await context.bot.send_message(chat_id, f"🚨 <b>GATE BREAK!</b> The Boss escaped and attacked the Guild!\n📉 Penalty: {affected} active Hunters lost {penalty} EXP.", parse_mode="HTML")
+            await context.bot.send_message(chat_id, premium(f"<b>🚨 GATE BREAK!</b> The Boss escaped and attacked the Guild!\n📉 Penalty: {affected} active Hunters lost {penalty} EXP. 😭"), parse_mode="HTML")
         except: pass
 
 async def clear_dungeon(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, participants: list, last_hitter_id: int):
@@ -715,24 +764,24 @@ async def clear_dungeon(update: Update, context: ContextTypes.DEFAULT_TYPE, chat
             display_uname = uname if uname else hunter_db[uid]['name']
             winners_text += f"🗡️ {display_uname} <code> (+{reward} EXP, +{cryst} 🔮) </code>\n"
             
-    clear_caption = f"""✅ <b>[ SYSTEM NOTIFICATION ]</b> ✅
+    clear_caption = premium(f"""<b>✅ [ SYSTEM NOTIFICATION ] ✅</b>
 <i>The Gate has been successfully secured!</i>
 
 💠 <b>STATUS:</b> 🔴 <b>CLOSED (CLEARED)</b>
 ⛩️ <b>GATE RANK:</b> <code> {dungeon['rank']}-Rank </code>
-👹 <b>BOSS NAME:</b> <code> {DUNGEON_RANKS[dungeon['rank']]['name']} (DEFEATED) </code>"""
+👹 <b>BOSS NAME:</b> <code> {DUNGEON_RANKS[dungeon['rank']]['name']} (DEFEATED) </code> ✨""")
             
     try:
         await context.bot.edit_message_caption(chat_id=chat_id, message_id=dungeon["msg_id"], caption=clear_caption, parse_mode="HTML")
         
         boss_name = DUNGEON_RANKS[dungeon['rank']]['name']
-        new_msg = f"""🎊 <b>DUNGEON CONQUERED!</b> 🎊
+        new_msg = premium(f"""<b>🎊 DUNGEON CONQUERED! 🎊</b>
 
-🏆 <b>HEROES OF THE RAID:</b>
+<b>🏆 HEROES OF THE RAID:</b>
 {winners_text}
 
 🌑 {mention_html(last_hitter_id, hunter_db[last_hitter_id]['name'])}, you delivered the final blow! The Boss's soul lingers.
-⏳ You have 30 seconds to type <code>/arise</code> and attempt Shadow Extraction!"""
+⏳ You have 30 seconds to type <code>/arise</code> and attempt Shadow Extraction! ✨""")
         
         await context.bot.send_message(chat_id, new_msg, parse_mode="HTML")
         arise_targets[chat_id] = {"uid": last_hitter_id, "boss": boss_name, "time": time.time()}
@@ -744,18 +793,18 @@ async def arise_shadow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
     if chat_id not in arise_targets or arise_targets[chat_id]["uid"] != user_id:
-        return await update.message.reply_text("❌ There is no shadow for you to extract here, or you lack the authority.")
+        return await update.message.reply_text(premium("<b>❌ There is no shadow for you to extract here, or you lack the authority.</b> 🤡"), parse_mode="HTML")
         
     target = arise_targets.pop(chat_id)
     if time.time() - target["time"] > 30:
-        return await update.message.reply_text("❌ You took too long. The shadow faded into the abyss.")
+        return await update.message.reply_text(premium("<b>❌ You took too long. The shadow faded into the abyss.</b> 😢"), parse_mode="HTML")
         
     if random.choice([True, False]):
         hunter_db[user_id]["shadows"].append(target["boss"])
         save_hunter(user_id)
-        await update.message.reply_text(f"🌑 <b>SHADOW EXTRACTION SUCCESSFUL!</b> 🌑\n\n<i>\"Arise.\"</i>\n{target['boss']} is now your loyal Shadow Soldier!", parse_mode="HTML")
+        await update.message.reply_text(premium(f"<b>🌑 SHADOW EXTRACTION SUCCESSFUL! 🌑</b>\n\n<i>\"Arise.\"</i>\n{target['boss']} is now your loyal Shadow Soldier! 👑"), parse_mode="HTML")
     else:
-        await update.message.reply_text(f"🌑 <b>SHADOW EXTRACTION FAILED.</b> 🌑\n\n<i>The soul of {target['boss']} resisted your command and vanished.</i>", parse_mode="HTML")
+        await update.message.reply_text(premium(f"<b>🌑 SHADOW EXTRACTION FAILED. 🌑</b>\n\n<i>The soul of {target['boss']} resisted your command and vanished.</i> 💔"), parse_mode="HTML")
 
 async def spawn_dungeon(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int):
     ranks = ["E", "E", "D", "D", "C", "C", "B", "A", "S", "RED"]
@@ -783,7 +832,7 @@ async def spawn_dungeon(update: Update, context: ContextTypes.DEFAULT_TYPE, chat
         instructions = "Heavy Boss! We need 3 different Hunters to click JOIN RAID!"
         markup = InlineKeyboardMarkup([[InlineKeyboardButton("🛡️ JOIN RAID (0/3)", callback_data="dungeon_join")]])
 
-    caption = f"""⚠️ <b>[ SYSTEM NOTIFICATION ]</b> ⚠️
+    caption = premium(f"""<b>⚠️ [ SYSTEM NOTIFICATION ] ⚠️</b>
 <i>A dimensional rift has opened in the Guild!</i>
 
 💠 <b>STATUS:</b> 🟢 <b>OPEN</b>
@@ -795,7 +844,7 @@ async def spawn_dungeon(update: Update, context: ContextTypes.DEFAULT_TYPE, chat
 <i>{instructions}</i>
 
 ⏳ <b>TIME REMAINING:</b> <code> 05:00 Minutes </code>
-🎁 <b>CLEAR REWARD:</b> <code> +{data['reward']} EXP, +{data['crystals']} 🔮 </code>"""
+🎁 <b>CLEAR REWARD:</b> <code> +{data['reward']} EXP, +{data['crystals']} 🔮 </code> ✨""")
 
     try:
         msg = await context.bot.send_video(
@@ -847,43 +896,47 @@ async def dungeon_button_handler(update: Update, context: ContextTypes.DEFAULT_T
                 await query.edit_message_reply_markup(reply_markup=markup)
             except: pass
 
-# ------------- MODERATION COMMANDS -------------
+# ------------- MODERATION COMMANDS (Enhanced) -------------
 async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     action = update.message.text.split()[0][1:].split('@')[0].lower()
-    if not await check_rights(update, action): return await update.message.reply_text("❌ You don't have Admin rights/permissions to do this.")
+    if not await check_rights(update, action): 
+        return await update.message.reply_text(premium("<b>❌ You don't have Admin rights/permissions to do this.</b> 🤡"), parse_mode="HTML")
     
     target_id = await get_user_id(update, context)
     if not target_id and action not in ["unpin"]: 
-        return await update.message.reply_text("❌ User not found! Reply to their message, or provide a valid ID/Username.")
+        return await update.message.reply_text(premium("<b>❌ User not found!</b> Reply to their message, or provide a valid ID/Username. 🥺"), parse_mode="HTML")
     chat_id = update.effective_chat.id
+    target_mention = mention_html(target_id, "User")
 
     try:
         if action == "ban":
             await context.bot.ban_chat_member(chat_id, target_id)
-            await update.message.reply_text(f"🔨 Banned {target_id}.")
+            await update.message.reply_text(premium(f"<b>🔨 Banished!</b>\n{target_mention} has been exiled from the realm! ✨"), parse_mode="HTML")
         elif action == "unban":
             await context.bot.unban_chat_member(chat_id, target_id)
-            await update.message.reply_text(f"✅ Unbanned {target_id}.")
+            await update.message.reply_text(premium(f"<b>✅ Redemption!</b>\n{target_mention} has been unbanned. Welcome back! 🌸"), parse_mode="HTML")
         elif action == "kick":
             await context.bot.ban_chat_member(chat_id, target_id)
             await context.bot.unban_chat_member(chat_id, target_id)
-            await update.message.reply_text(f"🦵 Kicked {target_id}.")
+            await update.message.reply_text(premium(f"<b>🦵 Kicked!</b>\n{target_mention} was removed from the group! 💨"), parse_mode="HTML")
         elif action == "mute":
             await context.bot.restrict_chat_member(chat_id, target_id, permissions=ChatPermissions(can_send_messages=False))
-            await update.message.reply_text(f"🔇 Muted {target_id}.")
+            await update.message.reply_text(premium(f"<b>🔇 Silenced!</b>\n{target_mention} can no longer speak. 🤫✨"), parse_mode="HTML")
         elif action == "unmute":
             await context.bot.restrict_chat_member(chat_id, target_id, permissions=ChatPermissions(can_send_messages=True, can_send_audios=True, can_send_documents=True, can_send_photos=True, can_send_videos=True, can_send_other_messages=True, can_add_web_page_previews=True))
-            await update.message.reply_text(f"🔊 Unmuted {target_id}.")
+            await update.message.reply_text(premium(f"<b>🔊 Unmuted!</b>\n{target_mention} is free to speak again! 🎶🎀"), parse_mode="HTML")
         elif action == "pin":
-            if update.message.reply_to_message: await context.bot.pin_chat_message(chat_id, update.message.reply_to_message.message_id)
+            if update.message.reply_to_message: 
+                await context.bot.pin_chat_message(chat_id, update.message.reply_to_message.message_id)
+                await update.message.reply_text(premium("<b>📌 Pinned successfully!</b> ✨"), parse_mode="HTML")
         elif action == "unpin":
             if update.message.reply_to_message: await context.bot.unpin_chat_message(chat_id, update.message.reply_to_message.message_id)
             else: await context.bot.unpin_chat_message(chat_id)
-            await update.message.reply_text("✅ Unpinned.")
+            await update.message.reply_text(premium("<b>✅ Unpinned successfully!</b> 🌸"), parse_mode="HTML")
         elif action == "promote":
             await context.bot.promote_chat_member(chat_id, target_id, can_manage_chat=True, can_delete_messages=True, can_manage_video_chats=True, can_restrict_members=True, can_promote_members=False, can_change_info=True, can_invite_users=True, can_pin_messages=True)
-            await update.message.reply_text(f"🌟 Promoted {target_id} to Admin.")
+            await update.message.reply_text(premium(f"<b>🌟 Promoted!</b>\n{target_mention} is now an Admin! 👑✨"), parse_mode="HTML")
         elif action == "demote":
             await context.bot.promote_chat_member(
                 chat_id, target_id, can_manage_chat=False, can_delete_messages=False, 
@@ -891,36 +944,36 @@ async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 can_promote_members=False, can_change_info=False, 
                 can_invite_users=False, can_pin_messages=False, is_anonymous=False
             )
-            await update.message.reply_text(f"📉 Demoted {target_id}. Unko ab wapas normal member bana diya gaya hai.")
-    except BadRequest as e: await update.message.reply_text(f"❌ Error: {e.message}")
-    except Exception as e: await update.message.reply_text(f"❌ System Error: {e}")
+            await update.message.reply_text(premium(f"<b>📉 Demoted!</b>\n{target_mention} is back to being a normal member! 🐾"), parse_mode="HTML")
+    except BadRequest as e: await update.message.reply_text(premium(f"<b>❌ Error:</b> {e.message} ⚠️"), parse_mode="HTML")
+    except Exception as e: await update.message.reply_text(premium(f"<b>❌ System Error:</b> {e} ☠️"), parse_mode="HTML")
 
 async def purge(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_rights(update, "purge"): return await update.message.reply_text("❌ Admin rights required.")
-    if not update.message.reply_to_message: return await update.message.reply_text("❌ Reply to the oldest message to start purge.")
+    if not await check_rights(update, "purge"): return await update.message.reply_text(premium("<b>❌ Admin rights required.</b> 🤡"), parse_mode="HTML")
+    if not update.message.reply_to_message: return await update.message.reply_text(premium("<b>❌ Reply to the oldest message to start purge.</b> ✨"), parse_mode="HTML")
     try:
         start_id, end_id, chat_id = update.message.reply_to_message.message_id, update.message.message_id, update.effective_chat.id
         msg_ids = list(range(start_id, end_id + 1))
         for i in range(0, len(msg_ids), 100):
             try: await context.bot.delete_messages(chat_id, msg_ids[i:i+100])
             except: pass 
-        ack = await context.bot.send_message(chat_id, "✅ Purge complete."); await asyncio.sleep(3); await ack.delete()
-    except Exception as e: await update.message.reply_text(f"Error: {e}")
+        ack = await context.bot.send_message(chat_id, premium("<b>✅ Purge complete! Area secured.</b> 🧹✨"), parse_mode="HTML"); await asyncio.sleep(3); await ack.delete()
+    except Exception as e: await update.message.reply_text(premium(f"<b>Error:</b> {e} ⚠️"), parse_mode="HTML")
 
 async def purge_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_rights(update, "purgegroup"): return await update.message.reply_text("❌ Admin rights required.")
+    if not await check_rights(update, "purgegroup"): return await update.message.reply_text(premium("<b>❌ Admin rights required.</b> 🤡"), parse_mode="HTML")
     chat_id, curr = update.effective_chat.id, update.message.message_id
     try:
         msg_ids = list(range(max(1, curr - 100), curr + 1))
         for i in range(0, len(msg_ids), 100):
             try: await context.bot.delete_messages(chat_id, msg_ids[i:i+100])
             except: pass
-        ack = await context.bot.send_message(chat_id, "✅ Group cleanup (Last 100 messages) complete."); await asyncio.sleep(5); await ack.delete()
-    except: await update.message.reply_text("❌ Messages too old/already deleted.")
+        ack = await context.bot.send_message(chat_id, premium("<b>✅ Group cleanup (Last 100 messages) complete!</b> 🫧🌸"), parse_mode="HTML"); await asyncio.sleep(5); await ack.delete()
+    except: await update.message.reply_text(premium("<b>❌ Messages too old/already deleted.</b> 🥺"), parse_mode="HTML")
 
 async def purge_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_rights(update, "purgeall"): return await update.message.reply_text("❌ Admin rights required.")
-    if not update.message.reply_to_message: return await update.message.reply_text("❌ Reply to the user whose messages you want to purge.")
+    if not await check_rights(update, "purgeall"): return await update.message.reply_text(premium("<b>❌ Admin rights required.</b> 🤡"), parse_mode="HTML")
+    if not update.message.reply_to_message: return await update.message.reply_text(premium("<b>❌ Reply to the user whose messages you want to purge.</b> ✨"), parse_mode="HTML")
     
     chat_id = update.effective_chat.id
     target_id = update.message.reply_to_message.from_user.id
@@ -930,7 +983,7 @@ async def purge_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg_ids_to_delete.append(update.message.message_id) 
         
         if not msg_ids_to_delete or len(msg_ids_to_delete) <= 1:
-            return await update.message.reply_text("❌ Is user ke koi recent messages history mein nahi mile.")
+            return await update.message.reply_text(premium("<b>❌ Is user ke koi recent messages history mein nahi mile.</b> 🤔"), parse_mode="HTML")
             
         for i in range(0, len(msg_ids_to_delete), 100):
             try: await context.bot.delete_messages(chat_id, msg_ids_to_delete[i:i+100])
@@ -938,52 +991,52 @@ async def purge_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         recent_messages_db[chat_id] = deque([(m, u) for m, u in recent_messages_db[chat_id] if u != target_id], maxlen=1000)
         
-        ack = await context.bot.send_message(chat_id, f"✅ User ke sabhi recent messages delete ho gaye."); await asyncio.sleep(5); await ack.delete()
-    except Exception as e: await update.message.reply_text(f"❌ Failed to purge all: {e}")
+        ack = await context.bot.send_message(chat_id, premium("<b>✅ User ke sabhi recent messages delete ho gaye!</b> 🧹✨"), parse_mode="HTML"); await asyncio.sleep(5); await ack.delete()
+    except Exception as e: await update.message.reply_text(premium(f"<b>❌ Failed to purge all:</b> {e} ⚠️"), parse_mode="HTML")
 
 async def commands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = """
-🌹 **CINDRELLA COMMANDS** 🌹
+<b>🌹 CINDRELLA COMMANDS 🌹</b>
 
-**⚔️ Solo Leveling (RPG):**
-`/stats [reply]` - Check Hunter License & Items
-`/hunt` - Enter Dungeon & Kill Monsters
-`/daily` - Daily Quest, Streak & Loot Box
-`/give <reply>` - Donate EXP, Crystals, Loot Box, Shadows
-`/pvp <reply> <amount>` - Duel a Hunter for EXP
-`/shop` - Buy Potions, Keys & Titles
-`/arise` - Extract Shadow (After Boss Kill)
-`/open_box` - Open S-Rank Loot Box
-`/top_hunter` - Top 10 Hunters in Group
-`/world_top` - Global Top 10 S-Rank Hunters
+<b>⚔️ Solo Leveling (RPG):</b>
+<code>/stats [reply]</code> - Check Hunter License & Items
+<code>/hunt</code> - Enter Dungeon & Kill Monsters
+<code>/daily</code> - Daily Quest, Streak & Loot Box
+<code>/give &lt;reply&gt;</code> - Donate EXP, Crystals, Loot Box, Shadows
+<code>/pvp &lt;reply&gt; &lt;amount&gt;</code> - Duel a Hunter for EXP
+<code>/shop</code> - Buy Potions, Keys & Titles
+<code>/arise</code> - Extract Shadow (After Boss Kill)
+<code>/open_box</code> - Open S-Rank Loot Box
+<code>/top_hunter</code> - Top 10 Hunters in Group
+<code>/world_top</code> - Global Top 10 S-Rank Hunters
 
-**🛠 Moderation:**
-`/ban`, `/unban`, `/kick`, `/mute`, `/unmute`
-`/pin`, `/unpin`, `/promote`, `/demote`
-`/warn`, `/unwarn`
-`/purge`, `/purgegroup`, `/purgeall`
+<b>🛠 Moderation:</b>
+<code>/ban</code>, <code>/unban</code>, <code>/kick</code>, <code>/mute</code>, <code>/unmute</code>
+<code>/pin</code>, <code>/unpin</code>, <code>/promote</code>, <code>/demote</code>
+<code>/warn</code>, <code>/unwarn</code>
+<code>/purge</code>, <code>/purgegroup</code>, <code>/purgeall</code>
 
-**🛡 Group Management:**
-`/id` - Get info about user/chat
-`/addblacklist`, `/rmblacklist`, `/blocklist`
-`/addfilter`, `/rmfilter`, `/setrules`, `/rules`
+<b>🛡 Group Management:</b>
+<code>/id</code> - Get info about user/chat
+<code>/addblacklist</code>, <code>/rmblacklist</code>, <code>/blocklist</code>
+<code>/addfilter</code>, <code>/rmfilter</code>, <code>/setrules</code>, <code>/rules</code>
 
-**✨ Fun & Utils:**
-`/couple` - Couple of the day!
-`/afk [reason]` - Set AFK status
-`/anime [name]` - Search for an anime
-`/admin` - Bot Admin Panel
+<b>✨ Fun & Utils:</b>
+<code>/couple</code> - Couple of the day!
+<code>/afk [reason]</code> - Set AFK status
+<code>/anime [name]</code> - Search for an anime
+<code>/admin</code> - Bot Admin Panel
     """
-    await update.message.reply_text(text, parse_mode="Markdown")
+    await update.message.reply_text(premium(text), parse_mode="HTML")
 
 async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_rights(update, "warn"): return await update.message.reply_text("❌ Admin rights required.")
+    if not await check_rights(update, "warn"): return await update.message.reply_text(premium("<b>❌ Admin rights required.</b> 🤡"), parse_mode="HTML")
     target_id = await get_user_id(update, context)
-    if not target_id: return await update.message.reply_text("❌ User not found! Reply to their message, or provide a valid ID/Username.")
+    if not target_id: return await update.message.reply_text(premium("<b>❌ User not found!</b> Reply to their message, or provide a valid ID/Username. 🥺"), parse_mode="HTML")
     chat_id = update.effective_chat.id
     try:
         target_member = await context.bot.get_chat_member(chat_id, target_id)
-        if target_id in admins_db or target_member.status in ['administrator', 'creator']: return await update.message.reply_text("❌ Cannot warn an Admin.")
+        if target_id in admins_db or target_member.status in ['administrator', 'creator']: return await update.message.reply_text(premium("<b>❌ Cannot warn an Admin.</b> 👑"), parse_mode="HTML")
     except: pass
 
     warnings_db[chat_id][target_id] += 1
@@ -997,63 +1050,63 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if count >= 3:
         await context.bot.restrict_chat_member(chat_id, target_id, permissions=ChatPermissions(can_send_messages=False))
         warnings_db[chat_id][target_id] = 0
-        await update.message.reply_text(f"🛑 User {target_id} reached 3 warnings and is now MUTED!")
-    else: await update.message.reply_text(f"⚠️ Warned {target_id}! ({count}/3)\nReason: {reason}")
+        await update.message.reply_text(premium(f"<b>🛑 MUTED!</b>\nUser {target_id} reached 3 warnings and is now silenced! 🤫"), parse_mode="HTML")
+    else: await update.message.reply_text(premium(f"<b>⚠️ Warned!</b>\nUser {target_id} has been warned! ({count}/3)\n<b>Reason:</b> {reason} ✨"), parse_mode="HTML")
 
 async def unwarn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_rights(update, "unwarn"): return await update.message.reply_text("❌ Admin rights required.")
+    if not await check_rights(update, "unwarn"): return await update.message.reply_text(premium("<b>❌ Admin rights required.</b> 🤡"), parse_mode="HTML")
     target_id = await get_user_id(update, context)
-    if not target_id: return await update.message.reply_text("❌ User not found! Reply to their message, or provide a valid ID/Username.")
+    if not target_id: return await update.message.reply_text(premium("<b>❌ User not found!</b> Reply to their message, or provide a valid ID/Username. 🥺"), parse_mode="HTML")
     chat_id = update.effective_chat.id
     if warnings_db[chat_id][target_id] > 0:
         warnings_db[chat_id][target_id] -= 1
-        await update.message.reply_text(f"✅ Removed 1 warning. Current warns: {warnings_db[chat_id][target_id]}/3")
-    else: await update.message.reply_text("✅ User has 0 warnings.")
+        await update.message.reply_text(premium(f"<b>✅ Removed 1 warning.</b> Current warns: {warnings_db[chat_id][target_id]}/3 🌸"), parse_mode="HTML")
+    else: await update.message.reply_text(premium("<b>✅ User has 0 warnings.</b> ✨"), parse_mode="HTML")
 
 async def set_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_rights(update, "rules"): return await update.message.reply_text("❌ Admin rights required.")
+    if not await check_rights(update, "rules"): return await update.message.reply_text("❌ Admin rights required.", parse_mode="HTML")
     text = update.message.text.split(None, 1)
-    if len(text) < 2: return await update.message.reply_text("❌ Please provide rules text.")
+    if len(text) < 2: return await update.message.reply_text("❌ Please provide rules text.", parse_mode="HTML")
     rules_db[update.effective_chat.id] = text[1]
-    await update.message.reply_text("✅ Rules updated!")
+    await update.message.reply_text(premium("<b>✅ Rules updated successfully!</b> 🌸"), parse_mode="HTML")
 
 async def show_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"📜 **Group Rules:**\n\n{rules_db.get(update.effective_chat.id, 'No rules set yet.')}", parse_mode="Markdown")
+    await update.message.reply_text(premium(f"<b>📜 Group Rules:</b>\n\n{rules_db.get(update.effective_chat.id, 'No rules set yet.')} ✨"), parse_mode="HTML")
 
 async def add_blacklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_rights(update, "blacklist"): return await update.message.reply_text("❌ Admin rights required.")
-    if not context.args: return await update.message.reply_text("❌ Provide a word.")
-    blacklist_db[update.effective_chat.id].add(context.args[0].lower()); await update.message.reply_text(f"✅ Word '{context.args[0]}' added.")
+    if not await check_rights(update, "blacklist"): return await update.message.reply_text(premium("<b>❌ Admin rights required.</b> 🤡"), parse_mode="HTML")
+    if not context.args: return await update.message.reply_text(premium("<b>❌ Provide a word.</b> 🥺"), parse_mode="HTML")
+    blacklist_db[update.effective_chat.id].add(context.args[0].lower()); await update.message.reply_text(premium(f"<b>✅ Word '{context.args[0]}' added to blacklist.</b> 🌸"), parse_mode="HTML")
 
 async def rm_blacklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_rights(update, "blacklist"): return await update.message.reply_text("❌ Admin rights required.")
-    if not context.args: return await update.message.reply_text("❌ Provide a word.")
-    blacklist_db[update.effective_chat.id].discard(context.args[0].lower()); await update.message.reply_text(f"✅ Word '{context.args[0]}' removed.")
+    if not await check_rights(update, "blacklist"): return await update.message.reply_text(premium("<b>❌ Admin rights required.</b> 🤡"), parse_mode="HTML")
+    if not context.args: return await update.message.reply_text(premium("<b>❌ Provide a word.</b> 🥺"), parse_mode="HTML")
+    blacklist_db[update.effective_chat.id].discard(context.args[0].lower()); await update.message.reply_text(premium(f"<b>✅ Word '{context.args[0]}' removed from blacklist.</b> ✨"), parse_mode="HTML")
 
 async def show_blocklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_rights(update, "blacklist"): return await update.message.reply_text("❌ Admin rights required.")
+    if not await check_rights(update, "blacklist"): return await update.message.reply_text(premium("<b>❌ Admin rights required.</b> 🤡"), parse_mode="HTML")
     words = blacklist_db[update.effective_chat.id]
-    if not words: return await update.message.reply_text("✅ Blocklist ekdum khali hai.")
-    await update.message.reply_text("🚫 **Blocked Words:**\n" + "\n".join([f"- `{w}`" for w in words]), parse_mode="Markdown")
+    if not words: return await update.message.reply_text(premium("<b>✅ Blocklist ekdum khali hai.</b> 🌸"), parse_mode="HTML")
+    await update.message.reply_text(premium("<b>🚫 Blocked Words:</b>\n" + "\n".join([f"- <code>{w}</code>" for w in words])), parse_mode="HTML")
 
 async def add_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_rights(update, "filter"): return await update.message.reply_text("❌ Admin rights required.")
+    if not await check_rights(update, "filter"): return await update.message.reply_text(premium("<b>❌ Admin rights required.</b> 🤡"), parse_mode="HTML")
     text = update.message.text.split(None, 2)
-    if len(text) < 3: return await update.message.reply_text("❌ Format: /addfilter <word> <reply>")
-    filters_db[update.effective_chat.id][text[1].lower()] = text[2]; await update.message.reply_text(f"✅ Filter added.")
+    if len(text) < 3: return await update.message.reply_text(premium("<b>❌ Format: /addfilter &lt;word&gt; &lt;reply&gt;</b> 🥺"), parse_mode="HTML")
+    filters_db[update.effective_chat.id][text[1].lower()] = text[2]; await update.message.reply_text(premium("<b>✅ Filter added successfully!</b> 🎀"), parse_mode="HTML")
 
 async def rm_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_rights(update, "filter"): return await update.message.reply_text("❌ Admin rights required.")
-    if not context.args: return await update.message.reply_text("❌ Provide a word.")
-    filters_db[update.effective_chat.id].pop(context.args[0].lower(), None); await update.message.reply_text(f"✅ Filter removed.")
+    if not await check_rights(update, "filter"): return await update.message.reply_text(premium("<b>❌ Admin rights required.</b> 🤡"), parse_mode="HTML")
+    if not context.args: return await update.message.reply_text(premium("<b>❌ Provide a word.</b> 🥺"), parse_mode="HTML")
+    filters_db[update.effective_chat.id].pop(context.args[0].lower(), None); await update.message.reply_text(premium("<b>✅ Filter removed!</b> ✨"), parse_mode="HTML")
 
 async def set_afk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reason = " ".join(context.args) if context.args else "No reason"
     afk_db[update.effective_user.id] = {"reason": reason, "time": dt.now(), "name": _display_name(update.effective_user)}
-    await update.message.reply_text(f"💤 {_display_name(update.effective_user)} is now AFK. Reason: {reason}")
+    await update.message.reply_text(premium(f"<b>💤 {_display_name(update.effective_user)} is now AFK.</b>\nReason: {reason} 😴"), parse_mode="HTML")
 
 async def get_anime(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args: return await update.message.reply_text("❌ Search naam toh batao! (e.g., /anime naruto)")
+    if not context.args: return await update.message.reply_text(premium("<b>❌ Search naam toh batao!</b> (e.g., /anime naruto) 🥺"), parse_mode="HTML")
     query = " ".join(context.args)
     try:
         async with httpx.AsyncClient() as client:
@@ -1061,15 +1114,15 @@ async def get_anime(update: Update, context: ContextTypes.DEFAULT_TYPE):
             data = res.json()
             if data['data']:
                 anime = data['data'][0]
-                await update.message.reply_text(f"🎬 **{anime['title']}**\n\n📊 Score: {anime.get('score', 'N/A')}\n🎞 Episodes: {anime.get('episodes', 'N/A')}\n🔄 Status: {anime.get('status', 'N/A')}\n\n🔗 [More Info]({anime['url']})", parse_mode="Markdown")
-            else: await update.message.reply_text("❌ Anime not found!")
-    except: await update.message.reply_text("❌ API error.")
+                await update.message.reply_text(premium(f"<b>🎬 {anime['title']}</b>\n\n📊 <b>Score:</b> {anime.get('score', 'N/A')}\n🎞 <b>Episodes:</b> {anime.get('episodes', 'N/A')}\n🔄 <b>Status:</b> {anime.get('status', 'N/A')}\n\n🔗 <a href='{anime['url']}'>More Info</a> ✨"), parse_mode="HTML")
+            else: await update.message.reply_text(premium("<b>❌ Anime not found!</b> 🥺"), parse_mode="HTML")
+    except: await update.message.reply_text(premium("<b>❌ API error.</b> ☠️"), parse_mode="HTML")
 
 # ------------- ADMIN PANEL -------------
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in admins_db: 
-        return await update.message.reply_text("❌ Only Bot Admins & Owner can use this.")
+        return await update.message.reply_text(premium("<b>❌ Only Bot Admins & Owner can use this.</b> 🤡"), parse_mode="HTML")
     
     if user_id == OWNER_ID:
         buttons = [
@@ -1078,14 +1131,14 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("➕ Add Bot Admin", callback_data="add_admin"), InlineKeyboardButton("➖ Remove Bot Admin", callback_data="remove_admin")],
             [InlineKeyboardButton("📋 List Admins", callback_data="list_admins")]
         ]
-        await update.message.reply_text(f"👑 **Owner Panel**\n📊 Replies Today: {usage_count['count']}", reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
+        await update.message.reply_text(premium(f"<b>👑 Owner Panel</b>\n📊 Replies Today: {usage_count['count']} ✨"), reply_markup=InlineKeyboardMarkup(buttons), parse_mode="HTML")
     else:
         buttons = [
             [InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")],
             [InlineKeyboardButton("🌐 List Groups", callback_data="list_groups")],
             [InlineKeyboardButton("📋 List Admins", callback_data="list_admins")]
         ]
-        await update.message.reply_text(f"🛠 **Bot Admin Panel**\n📊 Replies Today: {usage_count['count']}", reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
+        await update.message.reply_text(premium(f"<b>🛠 Bot Admin Panel</b>\n📊 Replies Today: {usage_count['count']} ✨"), reply_markup=InlineKeyboardMarkup(buttons), parse_mode="HTML")
 
 async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1094,42 +1147,42 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
 
     if query.data == "broadcast":
-        await query.message.reply_text("📢 Send me the broadcast message:")
+        await query.message.reply_text(premium("<b>📢 Send me the broadcast message:</b> ✨"), parse_mode="HTML")
         context.user_data["awaiting_broadcast"] = True
     elif query.data == "list_groups":
-        if not known_groups: return await query.message.reply_text("Bot is not active in any groups yet.")
-        await query.message.reply_text("Fetching group links... please wait. ⏳")
-        text = "🌐 <b>Bot Groups & Links:</b>\n\n"
+        if not known_groups: return await query.message.reply_text(premium("<b>Bot is not active in any groups yet.</b> 🌸"), parse_mode="HTML")
+        await query.message.reply_text(premium("<b>Fetching group links... please wait.</b> ⏳"), parse_mode="HTML")
+        text = "<b>🌐 Bot Groups & Links:</b>\n\n"
         for cid, title in list(known_groups.items()):
             safe_title = str(title).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             try: link = await context.bot.export_chat_invite_link(cid); text += f"🔹 {safe_title}: <a href='{link}'>Invite Link</a>\n"
             except: text += f"🔹 {safe_title}: <i>(No Admin Rights)</i>\n"
-        for i in range(0, len(text), 4000): await query.message.reply_text(text[i:i+4000], parse_mode="HTML", disable_web_page_preview=True)
+        for i in range(0, len(text), 4000): await query.message.reply_text(premium(text[i:i+4000]), parse_mode="HTML", disable_web_page_preview=True)
     elif query.data == "add_admin":
-        if user_id != OWNER_ID: return await query.message.reply_text("❌ Only the Owner can add admins.")
-        await query.message.reply_text("Send user ID to add as Bot Admin:")
+        if user_id != OWNER_ID: return await query.message.reply_text(premium("<b>❌ Only the Owner can add admins.</b> 👑"), parse_mode="HTML")
+        await query.message.reply_text(premium("<b>Send user ID to add as Bot Admin:</b> ✨"), parse_mode="HTML")
         context.user_data["awaiting_add_admin"] = True
     elif query.data == "remove_admin":
-        if user_id != OWNER_ID: return await query.message.reply_text("❌ Only the Owner can remove admins.")
-        await query.message.reply_text("Send user ID to remove from Bot Admins:")
+        if user_id != OWNER_ID: return await query.message.reply_text(premium("<b>❌ Only the Owner can remove admins.</b> 👑"), parse_mode="HTML")
+        await query.message.reply_text(premium("<b>Send user ID to remove from Bot Admins:</b> ✨"), parse_mode="HTML")
         context.user_data["awaiting_remove_admin"] = True
     elif query.data == "list_admins":
-        admin_text = "📋 **Current Bot Admins:**\n\n"
+        admin_text = "<b>📋 Current Bot Admins:</b>\n\n"
         for aid in admins_db:
             if aid == OWNER_ID:
-                admin_text += f"👑 Owner (`{aid}`)\n"
+                admin_text += f"👑 Owner (<code>{aid}</code>)\n"
             else:
                 if aid in hunter_db:
                     h = hunter_db[aid]
                     uname = f" {h['username']}" if h.get("username") else ""
-                    admin_text += f"🔹 {h['name']}{uname} (`{aid}`)\n"
+                    admin_text += f"🔹 {h['name']}{uname} (<code>{aid}</code>)\n"
                 else:
-                    admin_text += f"🔹 Unknown Hunter (`{aid}`)\n"
-        await query.message.reply_text(admin_text, parse_mode="Markdown")
+                    admin_text += f"🔹 Unknown Hunter (<code>{aid}</code>)\n"
+        await query.message.reply_text(premium(admin_text), parse_mode="HTML")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
-    await update.message.reply_text("Hey, I'm CINDRELLA 🌹—your AI Assistant!\nType /commands to see what I can do!", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text(premium("<b>Hey, I'm CINDRELLA! 🌸</b>\nYour AI Assistant! Type /commands to see what I can do! ✨"), reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id, chat = update.effective_chat.id, update.effective_chat
@@ -1149,7 +1202,9 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
             chat_members_db[chat_id].add(member.id)
             save_hunter(member.id)
 
-            final_msg = random.choice(WELCOME_MESSAGES).format(name=_display_name(member)) + f"\n🆔 UserID: {member.id}\n👤 Username: {username}\n📜 Bio: System Hidden"
+            raw_msg = random.choice(WELCOME_MESSAGES).format(name=_display_name(member))
+            final_msg = premium(raw_msg)
+            
             try:
                 safe_name = urllib.parse.quote(_display_name(member))
                 safe_chat = urllib.parse.quote(chat.title or "Our Group")
@@ -1158,15 +1213,17 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 avatar_url = "https://i.ibb.co/4pDNDk1/avatar.png" 
                 if photos.total_count > 0: avatar_url = (await context.bot.get_file(photos.photos[0][-1].file_id)).file_path
                 card_url = f"https://api.popcat.xyz/welcomecard?background={urllib.parse.quote(WELCOME_BG_URL)}&text1={safe_name}&text2=Welcome+to+{safe_chat}&text3={safe_member_count}&avatar={urllib.parse.quote(avatar_url)}"
-                await context.bot.send_photo(chat_id=chat_id, photo=card_url, caption=final_msg)
-            except: pass
+                await context.bot.send_photo(chat_id=chat_id, photo=card_url, caption=final_msg, parse_mode="HTML")
+            except: 
+                await context.bot.send_message(chat_id=chat_id, text=final_msg, parse_mode="HTML")
 
-# --- 🚀 UPGRADED PREMIUM EMOJI AI REPLY ---
+# --- 🚀 UPGRADED AI REPLY ---
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     
+    # Typing Action
     try:
         await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     except: pass
@@ -1174,7 +1231,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
     
-    system_prompt = "You are CINDRELLA, an exceptionally smart, caring, and witty AI companion. Speak naturally like a close best friend. CRITICAL RULES: 1. Reply in the exact same language and script the user uses (Hindi, Hinglish, or English). 2. Keep responses concise (1-3 lines). 3. NEVER repeat your previous lines. 4. Do not act like a bot. 5. Use basic emojis (like 🌸, ❤️, 🥺, ✨, 🎀, 🦋, 💖, 💗, 💕, 😊, 🥰, 😭, 🔥, 😂, 🤣, 👍, ✅, ❌, ⚠️, 👑, 🤍, 🩷, 😅). I will handle replacing them with premium aesthetic versions."
+    system_prompt = "You are CINDRELLA, an exceptionally smart, caring, and witty AI companion. Speak naturally like a close best friend. CRITICAL RULES: 1. Reply in the exact same language and script the user uses (Hindi, Hinglish, or English). 2. Keep responses concise (1-3 lines). 3. NEVER repeat your previous lines. 4. Do not act like a bot. 5. Use basic emojis (like 🌸, ❤️, 🥺, ✨, 🎀, 🦋, 💖, 💗, 💕, 😊, 🥰, 😭, 🔥, 😂, 🤣, 👍, ✅, ❌, ⚠️, 👑, 🤍, 🩷, 😅, ☕️, 🧸). I will handle replacing them with premium aesthetic versions."
     
     models = [
         "meta-llama/llama-3.3-70b-instruct:free", 
@@ -1208,11 +1265,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply = data["choices"][0]["message"]["content"].strip()
                     
                     reply = reply.replace("**", "").replace("*", "")
-                    
-                    # Apply Premium Emoji Filter
-                    premium_reply = inject_premium_emojis(reply)
-                    
-                    # Bold Formatting
+                    premium_reply = premium(reply)
                     bold_reply = f"<b>{premium_reply}</b>"
                     
                     usage_count["count"] += 1
@@ -1227,7 +1280,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except: 
             continue
             
-    try: await update.message.reply_text("<b>Server par thoda load hai, main ek minute mein wapas aati hoon! 🌸</b>", parse_mode="HTML")
+    try: await update.message.reply_text(premium("<b>Server par thoda load hai, main ek minute mein wapas aati hoon! 🌸</b>"), parse_mode="HTML")
     except: pass
 
 async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1235,15 +1288,15 @@ async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     today_str = str(date.today())
     if couples_db.get(chat_id, {}).get("date") == today_str:
         (id1, name1), (id2, name2) = couples_db[chat_id]["pair"]
-        return await update.message.reply_text(f"💞 Couple of the Day:\n{mention_html(id1, name1)} + {mention_html(id2, name2)}", parse_mode="HTML")
+        return await update.message.reply_text(premium(f"<b>💞 Couple of the Day:</b>\n{mention_html(id1, name1)} + {mention_html(id2, name2)} ✨"), parse_mode="HTML")
 
     members = chat_members_db.get(chat_id, set())
     pool = [(uid, hunter_db[uid]["name"]) for uid in members if uid in hunter_db]
-    if len(pool) < 2: return await update.message.reply_text("Not enough active members yet! (Thode aur logo ko ek message karne do pehle) ❤️")
+    if len(pool) < 2: return await update.message.reply_text(premium("<b>Not enough active members yet! (Thode aur logo ko ek message karne do pehle) ❤️</b>"), parse_mode="HTML")
         
     picked = random.sample(pool, 2)
     couples_db[chat_id] = {"date": today_str, "pair": picked}
-    await update.message.reply_text(f"💘 *Couple of the Day* 💘\n{mention_html(picked[0][0], picked[0][1])} + {mention_html(picked[1][0], picked[1][1])}", parse_mode="HTML")
+    await update.message.reply_text(premium(f"<b>💘 Couple of the Day 💘</b>\n{mention_html(picked[0][0], picked[0][1])} + {mention_html(picked[1][0], picked[1][1])} ✨"), parse_mode="HTML")
 
 async def couple_daily_reset(context: ContextTypes.DEFAULT_TYPE): couples_db.clear()
 
@@ -1274,7 +1327,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not matched_shadow:
             context.user_data.pop("awaiting_give_shadow", None)
             context.user_data.pop("give_target_id", None)
-            return await update.message.reply_text(f"❌ Tumhare paas '{shadow_name}' naam ka koi Shadow nahi hai. Transaction cancelled.")
+            return await update.message.reply_text(premium(f"<b>❌ Tumhare paas '{shadow_name}' naam ka koi Shadow nahi hai. Transaction cancelled.</b> 🤡"), parse_mode="HTML")
             
         if user.id != OWNER_ID:
             sender_data["shadows"].remove(matched_shadow)
@@ -1286,7 +1339,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop("awaiting_give_shadow", None)
         context.user_data.pop("give_target_id", None)
         
-        return await update.message.reply_text(f"✅ **SHADOW TRANSFERRED!**\n\n🌑 You gave **{matched_shadow}** to {target_name}!", parse_mode="Markdown")
+        return await update.message.reply_text(premium(f"<b>✅ SHADOW TRANSFERRED!</b>\n\n🌑 You gave <b>{matched_shadow}</b> to {target_name}! ✨"), parse_mode="HTML")
 
     if context.user_data.get("awaiting_give_amount"):
         amount_str = update.message.text.strip()
@@ -1308,7 +1361,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if user.id != OWNER_ID:
                 if sender_data.get(db_key, 0) < amount:
                     context.user_data.pop("awaiting_give_amount", None)
-                    return await update.message.reply_text(f"❌ Tumhare paas itne {item_names[item_type]} nahi hain!")
+                    return await update.message.reply_text(premium(f"<b>❌ Tumhare paas itne {item_names[item_type]} nahi hain!</b> 🥺"), parse_mode="HTML")
                 sender_data[db_key] -= amount
                 
             target_data[db_key] += amount
@@ -1319,12 +1372,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.pop("give_target_id", None)
             context.user_data.pop("give_item", None)
             
-            return await update.message.reply_text(f"✅ **SUCCESS!**\n\nYou gave **{amount} {item_names[item_type]}** to {target_name}!", parse_mode="Markdown")
+            return await update.message.reply_text(premium(f"<b>✅ SUCCESS!</b>\n\nYou gave <b>{amount} {item_names[item_type]}</b> to {target_name}! 🌸"), parse_mode="HTML")
         else:
             context.user_data.pop("awaiting_give_amount", None)
             context.user_data.pop("give_target_id", None)
             context.user_data.pop("give_item", None)
-            return await update.message.reply_text("❌ Invalid amount. Transaction cancelled.")
+            return await update.message.reply_text(premium("<b>❌ Invalid amount. Transaction cancelled.</b> 🤡"), parse_mode="HTML")
     
     if chat_id in active_dungeons and active_dungeons[chat_id]["type"] == 2:
         if update.message.reply_to_message and update.message.reply_to_message.message_id == active_dungeons[chat_id]["msg_id"]:
@@ -1350,7 +1403,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             success_groups = 0
             for cid in list(known_groups.keys()):
                 try: 
-                    await context.bot.send_message(cid, f"📢 **Broadcast Message:**\n\n{update.message.text}", parse_mode="Markdown")
+                    await context.bot.send_message(cid, premium(f"<b>📢 Broadcast Message:</b>\n\n{update.message.text} ✨"), parse_mode="HTML")
                     success_groups += 1
                     await asyncio.sleep(0.05)
                 except: pass
@@ -1358,22 +1411,22 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             success_users = 0
             for uid in list(hunter_db.keys()):
                 try:
-                    await context.bot.send_message(uid, f"📢 **System Broadcast:**\n\n{update.message.text}", parse_mode="Markdown")
+                    await context.bot.send_message(uid, premium(f"<b>📢 System Broadcast:</b>\n\n{update.message.text} 🌸"), parse_mode="HTML")
                     success_users += 1
                     await asyncio.sleep(0.05)
                 except: pass
                 
-            return await update.message.reply_text(f"✅ Broadcast successfully sent to **{success_groups} Groups** and **{success_users} Users DMs**!")
+            return await update.message.reply_text(premium(f"<b>✅ Broadcast successfully sent to {success_groups} Groups and {success_users} Users DMs!</b> 🎉"), parse_mode="HTML")
             
         if user.id == OWNER_ID:
             if context.user_data.pop("awaiting_add_admin", None):
-                try: admins_db.add(int(update.message.text.strip())); save_admins(); await update.message.reply_text("✅ Admin added.")
-                except: await update.message.reply_text("❌ Invalid ID.")
+                try: admins_db.add(int(update.message.text.strip())); save_admins(); await update.message.reply_text(premium("<b>✅ Admin added.</b> ✨"), parse_mode="HTML")
+                except: await update.message.reply_text(premium("<b>❌ Invalid ID.</b> 🤡"), parse_mode="HTML")
                 return
             if context.user_data.pop("awaiting_remove_admin", None):
                 try: 
-                    if int(update.message.text.strip()) != OWNER_ID: admins_db.discard(int(update.message.text.strip())); save_admins(); await update.message.reply_text("✅ Removed.")
-                except: await update.message.reply_text("❌ Invalid ID.")
+                    if int(update.message.text.strip()) != OWNER_ID: admins_db.discard(int(update.message.text.strip())); save_admins(); await update.message.reply_text(premium("<b>✅ Removed.</b> 🌸"), parse_mode="HTML")
+                except: await update.message.reply_text(premium("<b>❌ Invalid ID.</b> 🤡"), parse_mode="HTML")
                 return
 
     if user.id not in admins_db:
@@ -1385,7 +1438,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 await update.message.delete()
                 await context.bot.restrict_chat_member(chat_id, user.id, permissions=ChatPermissions(can_send_messages=False))
-                await context.bot.send_message(chat_id, f"🚫 {_display_name(user)} muted for spamming.")
+                await context.bot.send_message(chat_id, premium(f"<b>🚫 {_display_name(user)} muted for spamming.</b> 🤫"), parse_mode="HTML")
             except: 
                 pass 
             return 
@@ -1393,25 +1446,25 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if any(word in msg_lower for word in blacklist_db[chat_id]):
             try:
                 await update.message.delete()
-                await context.bot.send_message(chat_id, f"🚫 Watch your language, {_display_name(user)}!")
+                await context.bot.send_message(chat_id, premium(f"<b>🚫 Watch your language, {_display_name(user)}!</b> ⚠️"), parse_mode="HTML")
             except: 
                 pass
             return 
 
     if user.id in afk_db:
-        afk_db.pop(user.id); await update.message.reply_text(f"👋 Welcome back {_display_name(user)}, AFK removed!")
+        afk_db.pop(user.id); await update.message.reply_text(premium(f"<b>👋 Welcome back {_display_name(user)}, AFK removed!</b> ✨"), parse_mode="HTML")
     if update.message.reply_to_message and update.message.reply_to_message.from_user.id in afk_db:
         afk_user = afk_db[update.message.reply_to_message.from_user.id]
-        await update.message.reply_text(f"💤 {afk_user['name']} is currently AFK: {afk_user['reason']}")
+        await update.message.reply_text(premium(f"<b>💤 {afk_user['name']} is currently AFK:</b> {afk_user['reason']} 😴"), parse_mode="HTML")
 
-    if msg_lower in filters_db[chat_id]: return await update.message.reply_text(filters_db[chat_id][msg_lower])
+    if msg_lower in filters_db[chat_id]: return await update.message.reply_text(premium(f"<b>{filters_db[chat_id][msg_lower]}</b>"), parse_mode="HTML")
 
     bot_un = context.bot.username.lower() if context.bot.username else ""
     mentioned = (update.message.entities and any(e.type == "mention" and bot_un in msg_lower for e in update.message.entities)) or any(f in msg_lower for f in filters_db[chat_id].keys())
     replied = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
 
     if msg_lower in ["hi","hello","hey","yo","sup","hii","heyy","heya","cindy","cindrella","gm","gn"] and not mentioned and not replied:
-        await update.message.reply_text(random.choice(["<b>System Online! 🌸</b>","<b>Guild Manager reporting! 💕</b>","<b>Hey Master! ⚔️</b>","<b>Dungeon ready when you are! ☀️</b>"]), parse_mode="HTML")
+        await update.message.reply_text(premium(random.choice(["<b>System Online! 🌸</b>","<b>Guild Manager reporting! 💕</b>","<b>Hey Master! ⚔️</b>","<b>Dungeon ready when you are! ☀️</b>"])), parse_mode="HTML")
     elif mentioned or replied:
         await ai_reply(update, context)
 
