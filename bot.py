@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Emoji Syntax Error Fixed + Built-in Server + Memory)
+# bot.py - CINDRELLA final (AI Memory & Repetition Loop Fixed)
 import os
 import logging
 import json
@@ -39,7 +39,6 @@ class DummyHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-type', 'text/html; charset=utf-8')
         self.end_headers()
-        # ERROR FIXED HERE: Used .encode('utf-8') instead of b"..."
         self.wfile.write("🌸 CINDRELLA BOT IS AWAKE AND RUNNING! 🌸".encode('utf-8'))
     
     def log_message(self, format, *args):
@@ -51,10 +50,9 @@ def run_dummy_server():
     server.serve_forever()
 
 def keep_alive():
-    # Render URL ya Fallback URL
     url = os.environ.get("RENDER_EXTERNAL_URL") or os.environ.get("WEBHOOK_URL") or f"http://localhost:{os.environ.get('PORT', 10000)}"
     while True:
-        time.sleep(300) # Har 5 minute mein ping
+        time.sleep(300)
         try:
             httpx.get(url, timeout=5)
         except:
@@ -1127,6 +1125,7 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 await context.bot.send_photo(chat_id=chat_id, photo=card_url, caption=final_msg)
             except: pass
 
+# --- 🚀 NAYA: JABARDAST AI REPLY FUNCTION (Fixed Memory & Repetition) ---
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     user_id = update.effective_user.id
@@ -1134,22 +1133,31 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
     
-    system_prompt = "You are CINDRELLA, an exceptionally smart, empathetic, friendly, and highly intelligent AI assistant. Your personality is witty, natural, and helpful, much like a close friend who knows a lot. CRITICAL RULES: 1. You must strictly reply in the exact same language and script the user uses (e.g., English, Hindi script, or Hinglish). 2. Keep your responses concise (1-4 lines), natural, and highly engaging. 3. Do not sound like a robotic AI. Use emojis naturally. 4. Remember the context of the conversation and be a great conversationalist."
+    system_prompt = "You are CINDRELLA, an exceptionally smart, empathetic, friendly, and highly intelligent AI assistant. Your personality is witty, natural, and helpful. CRITICAL RULES:\n1. Strictly reply in the exact same language/script the user uses (English, Hindi, Hinglish).\n2. Keep responses concise (1-3 lines) and natural.\n3. NEVER repeat the same sentence twice in your response. Do not echo yourself.\n4. Remember the context of the conversation and be a great conversationalist.\n5. Use emojis naturally."
     
+    # Llama 3.3 70B First: Ye model sabse smart hai aur context kabhi nahi bhoolta
     models = [
-        "google/gemma-3-27b-it:free", 
         "meta-llama/llama-3.3-70b-instruct:free", 
-        "nvidia/nemotron-3-nano-30b-a3b:free", 
-        "stepfun/step-3.5-flash:free"
+        "google/gemma-3-27b-it:free", 
+        "stepfun/step-3.5-flash:free",
+        "nvidia/nemotron-3-nano-30b-a3b:free"
     ]
     
     messages = [{"role": "system", "content": system_prompt}]
-    messages.extend(chat_history_db[user_id])
+    # Purani sirf aakhiri 20 baatein hi bhejenge taaki AI confuse na ho
+    messages.extend(chat_history_db[user_id][-20:])
     messages.append({"role": "user", "content": message_text})
     
     for model in models:
         try:
-            payload = {"model": model, "messages": messages}
+            # Frequency and Presence Penalty add kar diya hai taaki repetition 100% khatam ho jaye
+            payload = {
+                "model": model, 
+                "messages": messages,
+                "temperature": 0.7,
+                "frequency_penalty": 0.5,
+                "presence_penalty": 0.5
+            }
             async with httpx.AsyncClient(timeout=20) as client:
                 res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
                 
@@ -1158,7 +1166,9 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     continue
                     
                 if res.status_code == 200:
-                    reply = res.json()["choices"][0]["message"]["content"]
+                    data = res.json()
+                    reply = data["choices"][0]["message"]["content"].strip()
+                    
                     usage_count["count"] += 1
                     
                     chat_history_db[user_id].append({"role": "user", "content": message_text})
