@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (AI Memory & Repetition Loop Fixed)
+# bot.py - CINDRELLA final (Premium Emoji Engine + Bold + Polling)
 import os
 import logging
 import json
@@ -7,6 +7,7 @@ import re
 import httpx
 import asyncio
 import time
+import html
 import urllib.parse
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -15,6 +16,7 @@ from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
     ChatPermissions, ChatMemberAdministrator, ChatMemberOwner, ChatMember
 )
+from telegram.constants import ChatAction
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
     CallbackQueryHandler, ContextTypes, filters
@@ -33,6 +35,40 @@ MONGO_URI = os.environ.get("MONGO_URI")
 ADMIN_IDS = set(json.loads(os.environ.get("ADMIN_IDS", "[]")))
 admins_db = ADMIN_IDS.union({OWNER_ID})
 
+# --- PREMIUM EMOJI ENGINE ---
+# Yeh dictionary AI ke standard text/emojis ko tumhare custom IDs mein convert karegi.
+EMOJI_MAP = {
+    "🌸": '<tg-emoji emoji-id="5361957543079844962">🌸</tg-emoji>',
+    "❤️": '<tg-emoji emoji-id="5362081079224180363">❤️</tg-emoji>',
+    "🥺": '<tg-emoji emoji-id="5359556488857659527">🥺</tg-emoji>',
+    "✨": '<tg-emoji emoji-id="5362085090723633936">✨</tg-emoji>',
+    "🎀": '<tg-emoji emoji-id="5359335109063353153">🎀</tg-emoji>',
+    "🦋": '<tg-emoji emoji-id="5361866446823497727">🦋</tg-emoji>',
+    "💖": '<tg-emoji emoji-id="5361698629566341740">💖</tg-emoji>',
+    "💗": '<tg-emoji emoji-id="5362027963363632114">💗</tg-emoji>',
+    "💕": '<tg-emoji emoji-id="5359477766402090098">💕</tg-emoji>',
+    "😊": '<tg-emoji emoji-id="5359619088005997893">😊</tg-emoji>',
+    "🥰": '<tg-emoji emoji-id="5359703393919050005">🥰</tg-emoji>',
+    "😭": '<tg-emoji emoji-id="5361688841335872649">😭</tg-emoji>',
+    "🔥": '<tg-emoji emoji-id="5359528850743108099">🔥</tg-emoji>',
+    "😂": '<tg-emoji emoji-id="5362088045661135278">🤣</tg-emoji>', # mapped to rofl for aesthetic pack
+    "🤣": '<tg-emoji emoji-id="5362088045661135278">🤣</tg-emoji>',
+    "👍": '<tg-emoji emoji-id="5361840191688417691">👍</tg-emoji>',
+    "✅": '<tg-emoji emoji-id="5361693153483037923">✅</tg-emoji>',
+    "❌": '<tg-emoji emoji-id="5361977776670779271">❌</tg-emoji>',
+    "⚠️": '<tg-emoji emoji-id="5361683000180351007">⚠️</tg-emoji>',
+    "👑": '<tg-emoji emoji-id="5359686514697576863">⭐️</tg-emoji>', # using star as crown substitute if needed
+    "🤍": '<tg-emoji emoji-id="5362081079224180363">❤️</tg-emoji>', # fallback to pink/red heart
+    "🩷": '<tg-emoji emoji-id="5362027963363632114">💗</tg-emoji>',
+    "😅": '<tg-emoji emoji-id="5361761572312064436">😊</tg-emoji>'
+}
+
+def inject_premium_emojis(text):
+    """Replaces standard emojis with custom Telegram Premium emoji tags."""
+    for standard_emoji, premium_tag in EMOJI_MAP.items():
+        text = text.replace(standard_emoji, premium_tag)
+    return text
+
 # --- BUILT-IN DUMMY SERVER (NO FLASK) ---
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -42,7 +78,7 @@ class DummyHandler(BaseHTTPRequestHandler):
         self.wfile.write("🌸 CINDRELLA BOT IS AWAKE AND RUNNING! 🌸".encode('utf-8'))
     
     def log_message(self, format, *args):
-        pass # Faltu logs hide karne ke liye
+        pass
 
 def run_dummy_server():
     port = int(os.environ.get("PORT", 10000))
@@ -1125,17 +1161,21 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 await context.bot.send_photo(chat_id=chat_id, photo=card_url, caption=final_msg)
             except: pass
 
-# --- 🚀 NAYA: JABARDAST AI REPLY FUNCTION (Fixed Memory & Repetition) ---
+# --- 🚀 UPGRADED PREMIUM EMOJI AI REPLY ---
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+    
+    try:
+        await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+    except: pass
     
     if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
     
-    system_prompt = "You are CINDRELLA, an exceptionally smart, empathetic, friendly, and highly intelligent AI assistant. Your personality is witty, natural, and helpful. CRITICAL RULES:\n1. Strictly reply in the exact same language/script the user uses (English, Hindi, Hinglish).\n2. Keep responses concise (1-3 lines) and natural.\n3. NEVER repeat the same sentence twice in your response. Do not echo yourself.\n4. Remember the context of the conversation and be a great conversationalist.\n5. Use emojis naturally."
+    system_prompt = "You are CINDRELLA, an exceptionally smart, caring, and witty AI companion. Speak naturally like a close best friend. CRITICAL RULES: 1. Reply in the exact same language and script the user uses (Hindi, Hinglish, or English). 2. Keep responses concise (1-3 lines). 3. NEVER repeat your previous lines. 4. Do not act like a bot. 5. Use basic emojis (like 🌸, ❤️, 🥺, ✨, 🎀, 🦋, 💖, 💗, 💕, 😊, 🥰, 😭, 🔥, 😂, 🤣, 👍, ✅, ❌, ⚠️, 👑, 🤍, 🩷, 😅). I will handle replacing them with premium aesthetic versions."
     
-    # Llama 3.3 70B First: Ye model sabse smart hai aur context kabhi nahi bhoolta
     models = [
         "meta-llama/llama-3.3-70b-instruct:free", 
         "google/gemma-3-27b-it:free", 
@@ -1144,19 +1184,17 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     
     messages = [{"role": "system", "content": system_prompt}]
-    # Purani sirf aakhiri 20 baatein hi bhejenge taaki AI confuse na ho
     messages.extend(chat_history_db[user_id][-20:])
     messages.append({"role": "user", "content": message_text})
     
     for model in models:
         try:
-            # Frequency and Presence Penalty add kar diya hai taaki repetition 100% khatam ho jaye
             payload = {
                 "model": model, 
                 "messages": messages,
                 "temperature": 0.7,
-                "frequency_penalty": 0.5,
-                "presence_penalty": 0.5
+                "frequency_penalty": 0.6,
+                "presence_penalty": 0.6
             }
             async with httpx.AsyncClient(timeout=20) as client:
                 res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
@@ -1169,6 +1207,14 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     data = res.json()
                     reply = data["choices"][0]["message"]["content"].strip()
                     
+                    reply = reply.replace("**", "").replace("*", "")
+                    
+                    # Apply Premium Emoji Filter
+                    premium_reply = inject_premium_emojis(reply)
+                    
+                    # Bold Formatting
+                    bold_reply = f"<b>{premium_reply}</b>"
+                    
                     usage_count["count"] += 1
                     
                     chat_history_db[user_id].append({"role": "user", "content": message_text})
@@ -1176,12 +1222,12 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if len(chat_history_db[user_id]) > 40:
                         chat_history_db[user_id] = chat_history_db[user_id][-40:]
                         
-                    try: return await update.message.reply_text(reply[:4096])
-                    except BadRequest: return await context.bot.send_message(chat_id=update.effective_chat.id, text=reply[:4096])
+                    try: return await update.message.reply_text(bold_reply, parse_mode="HTML")
+                    except BadRequest: return await context.bot.send_message(chat_id=chat_id, text=bold_reply, parse_mode="HTML")
         except: 
             continue
             
-    try: await update.message.reply_text("Server par thoda load hai, main ek minute mein wapas aati hoon! 🌸")
+    try: await update.message.reply_text("<b>Server par thoda load hai, main ek minute mein wapas aati hoon! 🌸</b>", parse_mode="HTML")
     except: pass
 
 async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1365,7 +1411,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     replied = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
 
     if msg_lower in ["hi","hello","hey","yo","sup","hii","heyy","heya","cindy","cindrella","gm","gn"] and not mentioned and not replied:
-        await update.message.reply_text(random.choice(["System Online! 🌸","Guild Manager reporting! 💕","Hey Master! ⚔️","Dungeon ready when you are! ☀️"]))
+        await update.message.reply_text(random.choice(["<b>System Online! 🌸</b>","<b>Guild Manager reporting! 💕</b>","<b>Hey Master! ⚔️</b>","<b>Dungeon ready when you are! ☀️</b>"]), parse_mode="HTML")
     elif mentioned or replied:
         await ai_reply(update, context)
 
