@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (100+ Users Load Balancer + No Server Load Msg)
+# bot.py - CINDRELLA final (Ultra Fast AI Fallback + OpenRouter Fix)
 import os
 import logging
 import json
@@ -109,7 +109,7 @@ EMOJI_MAP = {
     "📌": '<tg-emoji emoji-id="5361918188294512147">📌</tg-emoji>',
     "🤡": '<tg-emoji emoji-id="5361775402106756924">🤡</tg-emoji>',
     "🤣": '<tg-emoji emoji-id="5362088045661135278">🤣</tg-emoji>',
-    "😂": '<tg-emoji emoji-id="5362088045661135278">🤣</tg-emoji>', 
+    "😂": '<tg-emoji emoji-id="5362088045661135278">🤣</tg-emoji>',
     "☠️": '<tg-emoji emoji-id="5361981590601735641">☠️</tg-emoji>',
     "🙏": '<tg-emoji emoji-id="5361727818164083480">🙏</tg-emoji>',
     "🎉": '<tg-emoji emoji-id="5361775092869112132">🎉</tg-emoji>',
@@ -176,7 +176,7 @@ group_msg_counts = defaultdict(int)
 active_dungeons = {}
 arise_targets = {} 
 
-# NAYA: 100+ Users Load Balancer Queue (Limits concurrent free API calls to prevent 429 crash)
+# NAYA: 100+ Users Load Balancer Queue
 ai_queue = asyncio.Semaphore(4)
 
 ALL_SHADOWS = ["Goblin Chieftain", "Direwolf Alpha", "High Orc Kargal", "Assassin Kasaka", "Giant Iron Golem", "Tank", "Tusk", "Ant King Beru", "Blood-Red Igris", "Kamish", "Bellion"]
@@ -1194,65 +1194,36 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(premium("<b>Hey, I'm CINDRELLA! 🌸</b>\nYour AI Assistant! Type /commands to see what I can do! ✨"), reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
-async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id, chat = update.effective_chat.id, update.effective_chat
-    try: member_count = await chat.get_member_count()
-    except: member_count = "New"
+# --- 🚀 ULTRA-FAST FAIL-PROOF AI REPLY ---
+ai_queue = asyncio.Semaphore(4)
 
-    for member in update.message.new_chat_members:
-        if not member.is_bot:
-            username = f"@{member.username}" if member.username else "No Username"
-            
-            if member.id not in hunter_db:
-                hunter_db[member.id] = {
-                    "name": _display_name(member), "username": username if member.username else "",
-                    "exp": 0, "last_hunt": 0, "last_daily": "", "crystals": 0, "streak": 0, 
-                    "loot_boxes": 0, "shadows": [], "title": ""
-                }
-            chat_members_db[chat_id].add(member.id)
-            save_hunter(member.id)
-
-            raw_msg = random.choice(WELCOME_MESSAGES).format(name=_display_name(member))
-            final_msg = premium(raw_msg)
-            
-            try:
-                safe_name = urllib.parse.quote(_display_name(member))
-                safe_chat = urllib.parse.quote(chat.title or "Our Group")
-                safe_member_count = urllib.parse.quote(f"Member #{member_count}")
-                photos = await context.bot.get_user_profile_photos(member.id, limit=1)
-                avatar_url = "https://i.ibb.co/4pDNDk1/avatar.png" 
-                if photos.total_count > 0: avatar_url = (await context.bot.get_file(photos.photos[0][-1].file_id)).file_path
-                card_url = f"https://api.popcat.xyz/welcomecard?background={urllib.parse.quote(WELCOME_BG_URL)}&text1={safe_name}&text2=Welcome+to+{safe_chat}&text3={safe_member_count}&avatar={urllib.parse.quote(avatar_url)}"
-                await context.bot.send_photo(chat_id=chat_id, photo=card_url, caption=final_msg, parse_mode="HTML")
-            except: 
-                await context.bot.send_message(chat_id=chat_id, text=final_msg, parse_mode="HTML")
-
-# --- 🚀 UPGRADED AI REPLY (NINJA QUEUE SYSTEM & PERFECT MEMORY) ---
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     
-    # 100+ Users Load Balancer (Max 4 parallel requests to OpenRouter)
     async with ai_queue:
         try:
             await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
         except: pass
         
         if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
-        headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
+        
+        # RECOMMENDED BY OPENROUTER FOR FREE APIs
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}", 
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://t.me/CindrellaBot",
+            "X-Title": "Cindrella Bot"
+        }
         
         system_prompt = "You are CINDRELLA, an exceptionally smart, caring, and witty AI companion. Speak naturally like a close best friend. CRITICAL RULES: 1. Reply in the exact same language and script the user uses (Hindi, Hinglish, or English). 2. Keep responses concise (1-3 lines). 3. You MUST remember all details, names, and places the user mentioned earlier. 4. Do not act like a bot. 5. Use basic emojis (like 🌸, ❤️, 🥺, ✨, 🎀, 🦋, 💖, 💗, 💕, 😊, 🥰, 😭, 🔥, 😂, 🤣, 👍, ✅, ❌, ⚠️, 👑, 🤍, 🩷, 😅, ☕️, 🧸). I will handle replacing them with premium aesthetic versions."
         
-        # Extended Model List for ultra redundancy
         models = [
             "meta-llama/llama-3.3-70b-instruct:free", 
             "google/gemma-2-9b-it:free", 
             "microsoft/phi-3-mini-128k-instruct:free",
-            "huggingface/zephyr-7b-beta:free",
-            "qwen/qwen-2-7b-instruct:free",
-            "mistralai/mistral-7b-instruct:free",
-            "gryphe/mythomax-l2-13b:free"
+            "huggingface/zephyr-7b-beta:free"
         ]
         
         messages = [{"role": "system", "content": system_prompt}]
@@ -1262,7 +1233,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         success = False
         reply = ""
         
-        # Retry Loop: 2 full sweeps (14 attempts total per message)
+        # Faster retry loop with small timeouts so it never blocks
         for sweep in range(2):
             if success: break
             for model in models:
@@ -1271,25 +1242,26 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         "model": model, 
                         "messages": messages,
                         "temperature": 0.6,
-                        "frequency_penalty": 0.0, # Zero frequency penalty ensures flawless memory
+                        "frequency_penalty": 0.0,
                         "presence_penalty": 0.0
                     }
-                    async with httpx.AsyncClient(timeout=25) as client:
+                    async with httpx.AsyncClient(timeout=12) as client:
                         res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
                         
                         if res.status_code == 200:
                             data = res.json()
-                            reply = data["choices"][0]["message"]["content"].strip()
-                            success = True
-                            break
+                            if "choices" in data and len(data["choices"]) > 0:
+                                reply = data["choices"][0]["message"]["content"].strip()
+                                success = True
+                                break
                         elif res.status_code == 429:
-                            await asyncio.sleep(1.5) # Wait before trying next
+                            await asyncio.sleep(1) 
                         else:
                             continue
                 except: 
                     continue
             if not success:
-                await asyncio.sleep(2) # Wait before sweep 2
+                await asyncio.sleep(1)
                 
         if success:
             reply = reply.replace("**", "").replace("*", "")
@@ -1306,25 +1278,10 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try: return await update.message.reply_text(bold_reply, parse_mode="HTML")
             except BadRequest: return await context.bot.send_message(chat_id=chat_id, text=bold_reply, parse_mode="HTML")
         else:
-            # If completely failed due to massive load, SILENTLY ignore to prevent spam
-            pass
-
-async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    today_str = str(date.today())
-    if couples_db.get(chat_id, {}).get("date") == today_str:
-        (id1, name1), (id2, name2) = couples_db[chat_id]["pair"]
-        return await update.message.reply_text(premium(f"<b>💞 Couple of the Day:</b>\n{mention_html(id1, name1)} + {mention_html(id2, name2)} ✨"), parse_mode="HTML")
-
-    members = chat_members_db.get(chat_id, set())
-    pool = [(uid, hunter_db[uid]["name"]) for uid in members if uid in hunter_db]
-    if len(pool) < 2: return await update.message.reply_text(premium("<b>Not enough active members yet! (Thode aur logo ko ek message karne do pehle) ❤️</b>"), parse_mode="HTML")
-        
-    picked = random.sample(pool, 2)
-    couples_db[chat_id] = {"date": today_str, "pair": picked}
-    await update.message.reply_text(premium(f"<b>💘 Couple of the Day 💘</b>\n{mention_html(picked[0][0], picked[0][1])} + {mention_html(picked[1][0], picked[1][1])} ✨"), parse_mode="HTML")
-
-async def couple_daily_reset(context: ContextTypes.DEFAULT_TYPE): couples_db.clear()
+            # FALLBACK - NEVER FAIL SILENTLY
+            fallback = premium("<b>Oops! Mera network thoda slow chal raha hai babu... ek minute baad try karna! 🥺🌸</b>")
+            try: return await update.message.reply_text(fallback, parse_mode="HTML")
+            except: return await context.bot.send_message(chat_id=chat_id, text=fallback, parse_mode="HTML")
 
 # ------------- CORE TEXT HANDLER -------------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1492,8 +1449,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if msg_lower in ["hi","hello","hey","yo","sup","hii","heyy","heya","cindy","cindrella","gm","gn"] and not mentioned and not replied:
         await update.message.reply_text(premium(random.choice(["<b>System Online! 🌸</b>","<b>Guild Manager reporting! 💕</b>","<b>Hey Master! ⚔️</b>","<b>Dungeon ready when you are! ☀️</b>"])), parse_mode="HTML")
     elif mentioned or replied:
-        # Load balancing is handled entirely inside ai_reply
-        # We start it as a task so it doesn't block the rest of handle_text
         asyncio.create_task(ai_reply(update, context))
 
 # ------------- MAIN -------------
