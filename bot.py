@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Ultra Fast AI Fallback + OpenRouter Fix)
+# bot.py - CINDRELLA final (Missing Couple Command Restored + AI Balancer)
 import os
 import logging
 import json
@@ -906,7 +906,7 @@ async def dungeon_button_handler(update: Update, context: ContextTypes.DEFAULT_T
                 await query.edit_message_reply_markup(reply_markup=markup)
             except: pass
 
-# ------------- MODERATION COMMANDS (Enhanced) -------------
+# ------------- MODERATION COMMANDS -------------
 async def mod_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     action = update.message.text.split()[0][1:].split('@')[0].lower()
@@ -1194,6 +1194,56 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(premium("<b>Hey, I'm CINDRELLA! 🌸</b>\nYour AI Assistant! Type /commands to see what I can do! ✨"), reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
+async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id, chat = update.effective_chat.id, update.effective_chat
+    try: member_count = await chat.get_member_count()
+    except: member_count = "New"
+
+    for member in update.message.new_chat_members:
+        if not member.is_bot:
+            username = f"@{member.username}" if member.username else "No Username"
+            
+            if member.id not in hunter_db:
+                hunter_db[member.id] = {
+                    "name": _display_name(member), "username": username if member.username else "",
+                    "exp": 0, "last_hunt": 0, "last_daily": "", "crystals": 0, "streak": 0, 
+                    "loot_boxes": 0, "shadows": [], "title": ""
+                }
+            chat_members_db[chat_id].add(member.id)
+            save_hunter(member.id)
+
+            raw_msg = random.choice(WELCOME_MESSAGES).format(name=_display_name(member))
+            final_msg = premium(raw_msg)
+            
+            try:
+                safe_name = urllib.parse.quote(_display_name(member))
+                safe_chat = urllib.parse.quote(chat.title or "Our Group")
+                safe_member_count = urllib.parse.quote(f"Member #{member_count}")
+                photos = await context.bot.get_user_profile_photos(member.id, limit=1)
+                avatar_url = "https://i.ibb.co/4pDNDk1/avatar.png" 
+                if photos.total_count > 0: avatar_url = (await context.bot.get_file(photos.photos[0][-1].file_id)).file_path
+                card_url = f"https://api.popcat.xyz/welcomecard?background={urllib.parse.quote(WELCOME_BG_URL)}&text1={safe_name}&text2=Welcome+to+{safe_chat}&text3={safe_member_count}&avatar={urllib.parse.quote(avatar_url)}"
+                await context.bot.send_photo(chat_id=chat_id, photo=card_url, caption=final_msg, parse_mode="HTML")
+            except: 
+                await context.bot.send_message(chat_id=chat_id, text=final_msg, parse_mode="HTML")
+
+async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    today_str = str(date.today())
+    if couples_db.get(chat_id, {}).get("date") == today_str:
+        (id1, name1), (id2, name2) = couples_db[chat_id]["pair"]
+        return await update.message.reply_text(premium(f"<b>💞 Couple of the Day:</b>\n{mention_html(id1, name1)} + {mention_html(id2, name2)} ✨"), parse_mode="HTML")
+
+    members = chat_members_db.get(chat_id, set())
+    pool = [(uid, hunter_db[uid]["name"]) for uid in members if uid in hunter_db]
+    if len(pool) < 2: return await update.message.reply_text(premium("<b>Not enough active members yet! (Thode aur logo ko ek message karne do pehle) ❤️</b>"), parse_mode="HTML")
+        
+    picked = random.sample(pool, 2)
+    couples_db[chat_id] = {"date": today_str, "pair": picked}
+    await update.message.reply_text(premium(f"<b>💘 Couple of the Day 💘</b>\n{mention_html(picked[0][0], picked[0][1])} + {mention_html(picked[1][0], picked[1][1])} ✨"), parse_mode="HTML")
+
+async def couple_daily_reset(context: ContextTypes.DEFAULT_TYPE): couples_db.clear()
+
 # --- 🚀 ULTRA-FAST FAIL-PROOF AI REPLY ---
 ai_queue = asyncio.Semaphore(4)
 
@@ -1209,7 +1259,6 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
         
-        # RECOMMENDED BY OPENROUTER FOR FREE APIs
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}", 
             "Content-Type": "application/json",
@@ -1233,7 +1282,6 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         success = False
         reply = ""
         
-        # Faster retry loop with small timeouts so it never blocks
         for sweep in range(2):
             if success: break
             for model in models:
@@ -1278,7 +1326,6 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try: return await update.message.reply_text(bold_reply, parse_mode="HTML")
             except BadRequest: return await context.bot.send_message(chat_id=chat_id, text=bold_reply, parse_mode="HTML")
         else:
-            # FALLBACK - NEVER FAIL SILENTLY
             fallback = premium("<b>Oops! Mera network thoda slow chal raha hai babu... ek minute baad try karna! 🥺🌸</b>")
             try: return await update.message.reply_text(fallback, parse_mode="HTML")
             except: return await context.bot.send_message(chat_id=chat_id, text=fallback, parse_mode="HTML")
@@ -1478,6 +1525,7 @@ def main():
     application.add_handler(CommandHandler("shop", shop_menu))
     application.add_handler(CommandHandler("arise", arise_shadow))
     application.add_handler(CommandHandler("open_box", open_loot_box))
+    application.add_handler(CommandHandler("couple", couple_command)) # RESTORED COUPLE COMMAND
 
     mod_cmds = ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote", "demote"]
     application.add_handler(CommandHandler(mod_cmds, mod_action))
@@ -1493,7 +1541,6 @@ def main():
     application.add_handler(CommandHandler("rmfilter", rm_filter))
     application.add_handler(CommandHandler("afk", set_afk))
     application.add_handler(CommandHandler("anime", get_anime))
-    application.add_handler(CommandHandler("couple", couple_command))
 
     application.add_handler(CommandHandler("purge", purge))
     application.add_handler(CommandHandler("purgegroup", purge_group))
