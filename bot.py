@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Continuous Typing + 6sec Switch + Custom Models)
+# bot.py - CINDRELLA final (6s Timeout + Continuous Typing + New Models)
 import os
 import logging
 import json
@@ -176,7 +176,7 @@ group_msg_counts = defaultdict(int)
 active_dungeons = {}
 arise_targets = {} 
 
-# NAYA: 100+ Users Load Balancer Queue
+# 100+ Users Load Balancer Queue
 ai_queue = asyncio.Semaphore(4)
 
 ALL_SHADOWS = ["Goblin Chieftain", "Direwolf Alpha", "High Orc Kargal", "Assassin Kasaka", "Giant Iron Golem", "Tank", "Tusk", "Ant King Beru", "Blood-Red Igris", "Kamish", "Bellion"]
@@ -1194,56 +1194,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(premium("<b>Hey, I'm CINDRELLA! 🌸</b>\nYour AI Assistant! Type /commands to see what I can do! ✨"), reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
-async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id, chat = update.effective_chat.id, update.effective_chat
-    try: member_count = await chat.get_member_count()
-    except: member_count = "New"
+# --- 🚀 ULTRA-FAST FAIL-PROOF AI REPLY (Continuous Typing Status) ---
+ai_queue = asyncio.Semaphore(4)
 
-    for member in update.message.new_chat_members:
-        if not member.is_bot:
-            username = f"@{member.username}" if member.username else "No Username"
-            
-            if member.id not in hunter_db:
-                hunter_db[member.id] = {
-                    "name": _display_name(member), "username": username if member.username else "",
-                    "exp": 0, "last_hunt": 0, "last_daily": "", "crystals": 0, "streak": 0, 
-                    "loot_boxes": 0, "shadows": [], "title": ""
-                }
-            chat_members_db[chat_id].add(member.id)
-            save_hunter(member.id)
-
-            raw_msg = random.choice(WELCOME_MESSAGES).format(name=_display_name(member))
-            final_msg = premium(raw_msg)
-            
-            try:
-                safe_name = urllib.parse.quote(_display_name(member))
-                safe_chat = urllib.parse.quote(chat.title or "Our Group")
-                safe_member_count = urllib.parse.quote(f"Member #{member_count}")
-                photos = await context.bot.get_user_profile_photos(member.id, limit=1)
-                avatar_url = "https://i.ibb.co/4pDNDk1/avatar.png" 
-                if photos.total_count > 0: avatar_url = (await context.bot.get_file(photos.photos[0][-1].file_id)).file_path
-                card_url = f"https://api.popcat.xyz/welcomecard?background={urllib.parse.quote(WELCOME_BG_URL)}&text1={safe_name}&text2=Welcome+to+{safe_chat}&text3={safe_member_count}&avatar={urllib.parse.quote(avatar_url)}"
-                await context.bot.send_photo(chat_id=chat_id, photo=card_url, caption=final_msg, parse_mode="HTML")
-            except: 
-                await context.bot.send_message(chat_id=chat_id, text=final_msg, parse_mode="HTML")
-
-# --- 🚀 CONTINUOUS TYPING BACKGROUND TASK ---
-async def keep_typing(chat_id, context, stop_event):
-    while not stop_event.is_set():
-        try:
-            await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
-        except:
-            pass
-        await asyncio.sleep(4)
-
-# --- 🚀 AI REPLY (6 SEC SWITCH + CONTINUOUS TYPING) ---
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     
-    stop_typing = asyncio.Event()
-    asyncio.create_task(keep_typing(chat_id, context, stop_typing))
+    # Continuous typing logic (so it doesn't expire during API lag)
+    async def keep_typing():
+        while True:
+            try:
+                await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+            except: pass
+            await asyncio.sleep(4)
+            
+    typing_task = asyncio.create_task(keep_typing())
     
     try:
         async with ai_queue:
@@ -1260,9 +1227,9 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             models = [
                 "meta-llama/llama-3.3-70b-instruct:free", 
-                "z-ai/glm-4.5-air:free",
                 "google/gemma-4-31b-it:free",
                 "google/gemma-4-26b-a4b-it:free",
+                "z-ai/glm-4.5-air:free",
                 "baidu/qianfan-ocr-fast:free"
             ]
             
@@ -1284,8 +1251,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             "frequency_penalty": 0.0,
                             "presence_penalty": 0.0
                         }
-                        # ONLY 6 SECONDS TIMEOUT, THEN SWITCH
-                        async with httpx.AsyncClient(timeout=6.0) as client:
+                        async with httpx.AsyncClient(timeout=6) as client:
                             res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
                             
                             if res.status_code == 200:
@@ -1295,12 +1261,14 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                     success = True
                                     break
                             elif res.status_code == 429:
-                                continue # Skip instantly
+                                await asyncio.sleep(1) 
                             else:
                                 continue
                     except: 
-                        continue # If timeout hits, skip instantly
-                
+                        continue
+                if not success:
+                    await asyncio.sleep(1)
+                    
             if success:
                 reply = reply.replace("**", "").replace("*", "")
                 premium_reply = premium(reply)
@@ -1313,14 +1281,14 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if len(chat_history_db[user_id]) > 60:
                     chat_history_db[user_id] = chat_history_db[user_id][-60:]
                     
-                try: return await update.message.reply_text(bold_reply, parse_mode="HTML")
-                except BadRequest: return await context.bot.send_message(chat_id=chat_id, text=bold_reply, parse_mode="HTML")
+                try: await update.message.reply_text(bold_reply, parse_mode="HTML")
+                except BadRequest: await context.bot.send_message(chat_id=chat_id, text=bold_reply, parse_mode="HTML")
             else:
                 fallback = premium("<b>Oops! Mera network thoda slow chal raha hai babu... ek minute baad try karna! 🥺🌸</b>")
-                try: return await update.message.reply_text(fallback, parse_mode="HTML")
-                except: return await context.bot.send_message(chat_id=chat_id, text=fallback, parse_mode="HTML")
+                try: await update.message.reply_text(fallback, parse_mode="HTML")
+                except: await context.bot.send_message(chat_id=chat_id, text=fallback, parse_mode="HTML")
     finally:
-        stop_typing.set()
+        typing_task.cancel()
 
 # ------------- CORE TEXT HANDLER -------------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1517,7 +1485,7 @@ def main():
     application.add_handler(CommandHandler("shop", shop_menu))
     application.add_handler(CommandHandler("arise", arise_shadow))
     application.add_handler(CommandHandler("open_box", open_loot_box))
-    application.add_handler(CommandHandler("couple", couple_command)) 
+    application.add_handler(CommandHandler("couple", couple_command))
 
     mod_cmds = ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote", "demote"]
     application.add_handler(CommandHandler(mod_cmds, mod_action))
