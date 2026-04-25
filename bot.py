@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (Missing Couple Command Restored + AI Balancer)
+# bot.py - CINDRELLA final (Continuous Typing + 6sec Switch + Custom Models)
 import os
 import logging
 import json
@@ -1227,108 +1227,100 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
             except: 
                 await context.bot.send_message(chat_id=chat_id, text=final_msg, parse_mode="HTML")
 
-async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    today_str = str(date.today())
-    if couples_db.get(chat_id, {}).get("date") == today_str:
-        (id1, name1), (id2, name2) = couples_db[chat_id]["pair"]
-        return await update.message.reply_text(premium(f"<b>💞 Couple of the Day:</b>\n{mention_html(id1, name1)} + {mention_html(id2, name2)} ✨"), parse_mode="HTML")
+# --- 🚀 CONTINUOUS TYPING BACKGROUND TASK ---
+async def keep_typing(chat_id, context, stop_event):
+    while not stop_event.is_set():
+        try:
+            await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+        except:
+            pass
+        await asyncio.sleep(4)
 
-    members = chat_members_db.get(chat_id, set())
-    pool = [(uid, hunter_db[uid]["name"]) for uid in members if uid in hunter_db]
-    if len(pool) < 2: return await update.message.reply_text(premium("<b>Not enough active members yet! (Thode aur logo ko ek message karne do pehle) ❤️</b>"), parse_mode="HTML")
-        
-    picked = random.sample(pool, 2)
-    couples_db[chat_id] = {"date": today_str, "pair": picked}
-    await update.message.reply_text(premium(f"<b>💘 Couple of the Day 💘</b>\n{mention_html(picked[0][0], picked[0][1])} + {mention_html(picked[1][0], picked[1][1])} ✨"), parse_mode="HTML")
-
-async def couple_daily_reset(context: ContextTypes.DEFAULT_TYPE): couples_db.clear()
-
-# --- 🚀 ULTRA-FAST FAIL-PROOF AI REPLY ---
-ai_queue = asyncio.Semaphore(4)
-
+# --- 🚀 AI REPLY (6 SEC SWITCH + CONTINUOUS TYPING) ---
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     
-    async with ai_queue:
-        try:
-            await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
-        except: pass
-        
-        if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
-        
-        headers = {
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}", 
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://t.me/CindrellaBot",
-            "X-Title": "Cindrella Bot"
-        }
-        
-        system_prompt = "You are CINDRELLA, an exceptionally smart, caring, and witty AI companion. Speak naturally like a close best friend. CRITICAL RULES: 1. Reply in the exact same language and script the user uses (Hindi, Hinglish, or English). 2. Keep responses concise (1-3 lines). 3. You MUST remember all details, names, and places the user mentioned earlier. 4. Do not act like a bot. 5. Use basic emojis (like 🌸, ❤️, 🥺, ✨, 🎀, 🦋, 💖, 💗, 💕, 😊, 🥰, 😭, 🔥, 😂, 🤣, 👍, ✅, ❌, ⚠️, 👑, 🤍, 🩷, 😅, ☕️, 🧸). I will handle replacing them with premium aesthetic versions."
-        
-        models = [
-            "meta-llama/llama-3.3-70b-instruct:free", 
-            "google/gemma-2-9b-it:free", 
-            "microsoft/phi-3-mini-128k-instruct:free",
-            "huggingface/zephyr-7b-beta:free"
-        ]
-        
-        messages = [{"role": "system", "content": system_prompt}]
-        messages.extend(chat_history_db[user_id][-30:])
-        messages.append({"role": "user", "content": message_text})
-        
-        success = False
-        reply = ""
-        
-        for sweep in range(2):
-            if success: break
-            for model in models:
-                try:
-                    payload = {
-                        "model": model, 
-                        "messages": messages,
-                        "temperature": 0.6,
-                        "frequency_penalty": 0.0,
-                        "presence_penalty": 0.0
-                    }
-                    async with httpx.AsyncClient(timeout=12) as client:
-                        res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
-                        
-                        if res.status_code == 200:
-                            data = res.json()
-                            if "choices" in data and len(data["choices"]) > 0:
-                                reply = data["choices"][0]["message"]["content"].strip()
-                                success = True
-                                break
-                        elif res.status_code == 429:
-                            await asyncio.sleep(1) 
-                        else:
-                            continue
-                except: 
-                    continue
-            if not success:
-                await asyncio.sleep(1)
-                
-        if success:
-            reply = reply.replace("**", "").replace("*", "")
-            premium_reply = premium(reply)
-            bold_reply = f"<b>{premium_reply}</b>"
+    stop_typing = asyncio.Event()
+    asyncio.create_task(keep_typing(chat_id, context, stop_typing))
+    
+    try:
+        async with ai_queue:
+            if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
             
-            usage_count["count"] += 1
+            headers = {
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}", 
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://t.me/CindrellaBot",
+                "X-Title": "Cindrella Bot"
+            }
             
-            chat_history_db[user_id].append({"role": "user", "content": message_text})
-            chat_history_db[user_id].append({"role": "assistant", "content": reply})
-            if len(chat_history_db[user_id]) > 60:
-                chat_history_db[user_id] = chat_history_db[user_id][-60:]
+            system_prompt = "You are CINDRELLA, an exceptionally smart, caring, and witty AI companion. Speak naturally like a close best friend. CRITICAL RULES: 1. Reply in the exact same language and script the user uses (Hindi, Hinglish, or English). 2. Keep responses concise (1-3 lines). 3. You MUST remember all details, names, and places the user mentioned earlier. 4. Do not act like a bot. 5. Use basic emojis (like 🌸, ❤️, 🥺, ✨, 🎀, 🦋, 💖, 💗, 💕, 😊, 🥰, 😭, 🔥, 😂, 🤣, 👍, ✅, ❌, ⚠️, 👑, 🤍, 🩷, 😅, ☕️, 🧸). I will handle replacing them with premium aesthetic versions."
+            
+            models = [
+                "meta-llama/llama-3.3-70b-instruct:free", 
+                "z-ai/glm-4.5-air:free",
+                "google/gemma-4-31b-it:free",
+                "google/gemma-4-26b-a4b-it:free",
+                "baidu/qianfan-ocr-fast:free"
+            ]
+            
+            messages = [{"role": "system", "content": system_prompt}]
+            messages.extend(chat_history_db[user_id][-30:])
+            messages.append({"role": "user", "content": message_text})
+            
+            success = False
+            reply = ""
+            
+            for sweep in range(2):
+                if success: break
+                for model in models:
+                    try:
+                        payload = {
+                            "model": model, 
+                            "messages": messages,
+                            "temperature": 0.6,
+                            "frequency_penalty": 0.0,
+                            "presence_penalty": 0.0
+                        }
+                        # ONLY 6 SECONDS TIMEOUT, THEN SWITCH
+                        async with httpx.AsyncClient(timeout=6.0) as client:
+                            res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+                            
+                            if res.status_code == 200:
+                                data = res.json()
+                                if "choices" in data and len(data["choices"]) > 0:
+                                    reply = data["choices"][0]["message"]["content"].strip()
+                                    success = True
+                                    break
+                            elif res.status_code == 429:
+                                continue # Skip instantly
+                            else:
+                                continue
+                    except: 
+                        continue # If timeout hits, skip instantly
                 
-            try: return await update.message.reply_text(bold_reply, parse_mode="HTML")
-            except BadRequest: return await context.bot.send_message(chat_id=chat_id, text=bold_reply, parse_mode="HTML")
-        else:
-            fallback = premium("<b>Oops! Mera network thoda slow chal raha hai babu... ek minute baad try karna! 🥺🌸</b>")
-            try: return await update.message.reply_text(fallback, parse_mode="HTML")
-            except: return await context.bot.send_message(chat_id=chat_id, text=fallback, parse_mode="HTML")
+            if success:
+                reply = reply.replace("**", "").replace("*", "")
+                premium_reply = premium(reply)
+                bold_reply = f"<b>{premium_reply}</b>"
+                
+                usage_count["count"] += 1
+                
+                chat_history_db[user_id].append({"role": "user", "content": message_text})
+                chat_history_db[user_id].append({"role": "assistant", "content": reply})
+                if len(chat_history_db[user_id]) > 60:
+                    chat_history_db[user_id] = chat_history_db[user_id][-60:]
+                    
+                try: return await update.message.reply_text(bold_reply, parse_mode="HTML")
+                except BadRequest: return await context.bot.send_message(chat_id=chat_id, text=bold_reply, parse_mode="HTML")
+            else:
+                fallback = premium("<b>Oops! Mera network thoda slow chal raha hai babu... ek minute baad try karna! 🥺🌸</b>")
+                try: return await update.message.reply_text(fallback, parse_mode="HTML")
+                except: return await context.bot.send_message(chat_id=chat_id, text=fallback, parse_mode="HTML")
+    finally:
+        stop_typing.set()
 
 # ------------- CORE TEXT HANDLER -------------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1525,7 +1517,7 @@ def main():
     application.add_handler(CommandHandler("shop", shop_menu))
     application.add_handler(CommandHandler("arise", arise_shadow))
     application.add_handler(CommandHandler("open_box", open_loot_box))
-    application.add_handler(CommandHandler("couple", couple_command)) # RESTORED COUPLE COMMAND
+    application.add_handler(CommandHandler("couple", couple_command)) 
 
     mod_cmds = ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote", "demote"]
     application.add_handler(CommandHandler(mod_cmds, mod_action))
