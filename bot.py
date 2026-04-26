@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (6s Timeout + Continuous Typing + New Models)
+# bot.py - CINDRELLA final (6s Timeout + New Models + Couple Command Restored)
 import os
 import logging
 import json
@@ -1194,7 +1194,57 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
     await update.message.reply_text(premium("<b>Hey, I'm CINDRELLA! 🌸</b>\nYour AI Assistant! Type /commands to see what I can do! ✨"), reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
-# --- 🚀 ULTRA-FAST FAIL-PROOF AI REPLY (Continuous Typing Status) ---
+async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    today_str = str(date.today())
+    if couples_db.get(chat_id, {}).get("date") == today_str:
+        (id1, name1), (id2, name2) = couples_db[chat_id]["pair"]
+        return await update.message.reply_text(premium(f"<b>💞 Couple of the Day:</b>\n{mention_html(id1, name1)} + {mention_html(id2, name2)} ✨"), parse_mode="HTML")
+
+    members = chat_members_db.get(chat_id, set())
+    pool = [(uid, hunter_db[uid]["name"]) for uid in members if uid in hunter_db]
+    if len(pool) < 2: return await update.message.reply_text(premium("<b>Not enough active members yet! (Thode aur logo ko ek message karne do pehle) ❤️</b>"), parse_mode="HTML")
+        
+    picked = random.sample(pool, 2)
+    couples_db[chat_id] = {"date": today_str, "pair": picked}
+    await update.message.reply_text(premium(f"<b>💘 Couple of the Day 💘</b>\n{mention_html(picked[0][0], picked[0][1])} + {mention_html(picked[1][0], picked[1][1])} ✨"), parse_mode="HTML")
+
+async def couple_daily_reset(context: ContextTypes.DEFAULT_TYPE): couples_db.clear()
+
+async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id, chat = update.effective_chat.id, update.effective_chat
+    try: member_count = await chat.get_member_count()
+    except: member_count = "New"
+
+    for member in update.message.new_chat_members:
+        if not member.is_bot:
+            username = f"@{member.username}" if member.username else "No Username"
+            
+            if member.id not in hunter_db:
+                hunter_db[member.id] = {
+                    "name": _display_name(member), "username": username if member.username else "",
+                    "exp": 0, "last_hunt": 0, "last_daily": "", "crystals": 0, "streak": 0, 
+                    "loot_boxes": 0, "shadows": [], "title": ""
+                }
+            chat_members_db[chat_id].add(member.id)
+            save_hunter(member.id)
+
+            raw_msg = random.choice(WELCOME_MESSAGES).format(name=_display_name(member))
+            final_msg = premium(raw_msg)
+            
+            try:
+                safe_name = urllib.parse.quote(_display_name(member))
+                safe_chat = urllib.parse.quote(chat.title or "Our Group")
+                safe_member_count = urllib.parse.quote(f"Member #{member_count}")
+                photos = await context.bot.get_user_profile_photos(member.id, limit=1)
+                avatar_url = "https://i.ibb.co/4pDNDk1/avatar.png" 
+                if photos.total_count > 0: avatar_url = (await context.bot.get_file(photos.photos[0][-1].file_id)).file_path
+                card_url = f"https://api.popcat.xyz/welcomecard?background={urllib.parse.quote(WELCOME_BG_URL)}&text1={safe_name}&text2=Welcome+to+{safe_chat}&text3={safe_member_count}&avatar={urllib.parse.quote(avatar_url)}"
+                await context.bot.send_photo(chat_id=chat_id, photo=card_url, caption=final_msg, parse_mode="HTML")
+            except: 
+                await context.bot.send_message(chat_id=chat_id, text=final_msg, parse_mode="HTML")
+
+# --- 🚀 ULTRA-FAST FAIL-PROOF AI REPLY ---
 ai_queue = asyncio.Semaphore(4)
 
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1202,7 +1252,6 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     
-    # Continuous typing logic (so it doesn't expire during API lag)
     async def keep_typing():
         while True:
             try:
