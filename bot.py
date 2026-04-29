@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA final (6s Timeout + New Models + Couple Command Restored)
+# bot.py - CINDRELLA final (DM Fix + Typing Fix + Dev Roleplay + 100+ Load Balancer)
 import os
 import logging
 import json
@@ -176,8 +176,8 @@ group_msg_counts = defaultdict(int)
 active_dungeons = {}
 arise_targets = {} 
 
-# 100+ Users Load Balancer Queue
-ai_queue = asyncio.Semaphore(4)
+# NAYA: 100+ Users Load Balancer Queue
+ai_queue = asyncio.Semaphore(15)
 
 ALL_SHADOWS = ["Goblin Chieftain", "Direwolf Alpha", "High Orc Kargal", "Assassin Kasaka", "Giant Iron Golem", "Tank", "Tusk", "Ant King Beru", "Blood-Red Igris", "Kamish", "Bellion"]
 
@@ -1245,7 +1245,7 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 await context.bot.send_message(chat_id=chat_id, text=final_msg, parse_mode="HTML")
 
 # --- 🚀 ULTRA-FAST FAIL-PROOF AI REPLY ---
-ai_queue = asyncio.Semaphore(4)
+ai_queue = asyncio.Semaphore(15)
 
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
@@ -1253,11 +1253,12 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     
     async def keep_typing():
-        while True:
-            try:
+        try:
+            while True:
                 await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
-            except: pass
-            await asyncio.sleep(4)
+                await asyncio.sleep(4)
+        except asyncio.CancelledError:
+            pass
             
     typing_task = asyncio.create_task(keep_typing())
     
@@ -1272,12 +1273,22 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "X-Title": "Cindrella Bot"
             }
             
-            system_prompt = "You are CINDRELLA, an exceptionally smart, caring, and witty AI companion. Speak naturally like a close best friend. CRITICAL RULES: 1. Reply in the exact same language and script the user uses (Hindi, Hinglish, or English). 2. Keep responses concise (1-3 lines). 3. You MUST remember all details, names, and places the user mentioned earlier. 4. Do not act like a bot. 5. Use basic emojis (like 🌸, ❤️, 🥺, ✨, 🎀, 🦋, 💖, 💗, 💕, 😊, 🥰, 😭, 🔥, 😂, 🤣, 👍, ✅, ❌, ⚠️, 👑, 🤍, 🩷, 😅, ☕️, 🧸). I will handle replacing them with premium aesthetic versions. if someone as who is your owner or creator tell them dev and send them his username @hello_devu."
+            system_prompt = (
+                "You are CINDRELLA, an exceptionally smart, caring, and witty AI companion. Speak naturally like a close best friend. "
+                "CRITICAL RULES: 1. Reply in the exact same language and script the user uses (Hindi, Hinglish, or English). "
+                "2. Keep responses concise (1-3 lines). 3. You MUST remember all details, names, and places the user mentioned earlier. "
+                "4. Do not act like a bot. 5. If anyone asks about your creator, owner, boyfriend, or husband, creatively and affectionately state that 'dev' is your owner/boyfriend. If they ask for his username, give '@hello_devu'. "
+                "6. Use basic emojis (like 🌸, ❤️, 🥺, ✨, 🎀, 🦋, 💖, 💗, 💕, 😊, 🥰, 😭, 🔥, 😂, 🤣, 👍, ✅, ❌, ⚠️, 👑, 🤍, 🩷, 😅, ☕️, 🧸). I will handle replacing them with premium aesthetic versions."
+            )
             
             models = [
                 "meta-llama/llama-3.3-70b-instruct:free", 
-                "google/gemma-4-31b-it:free",
-                "google/gemma-4-26b-a4b-it:free",
+                "google/gemma-3-27b-it:free",
+                "google/gemma-2-9b-it:free",
+                "microsoft/phi-3-mini-128k-instruct:free",
+                "huggingface/zephyr-7b-beta:free",
+                "mistralai/mistral-7b-instruct:free",
+                "qwen/qwen-2-7b-instruct:free",
                 "z-ai/glm-4.5-air:free",
                 "baidu/qianfan-ocr-fast:free"
             ]
@@ -1300,7 +1311,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             "frequency_penalty": 0.0,
                             "presence_penalty": 0.0
                         }
-                        async with httpx.AsyncClient(timeout=6) as client:
+                        async with httpx.AsyncClient(timeout=15) as client:
                             res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
                             
                             if res.status_code == 200:
@@ -1310,7 +1321,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                     success = True
                                     break
                             elif res.status_code == 429:
-                                await asyncio.sleep(1) 
+                                await asyncio.sleep(1.5) 
                             else:
                                 continue
                     except: 
@@ -1318,6 +1329,8 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if not success:
                     await asyncio.sleep(1)
                     
+            typing_task.cancel() # Cancel typing JUST before replying
+            
             if success:
                 reply = reply.replace("**", "").replace("*", "")
                 premium_reply = premium(reply)
@@ -1330,19 +1343,21 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if len(chat_history_db[user_id]) > 60:
                     chat_history_db[user_id] = chat_history_db[user_id][-60:]
                     
-                try: await update.message.reply_text(bold_reply, parse_mode="HTML")
-                except BadRequest: await context.bot.send_message(chat_id=chat_id, text=bold_reply, parse_mode="HTML")
+                try: return await update.message.reply_text(bold_reply, parse_mode="HTML")
+                except BadRequest: return await context.bot.send_message(chat_id=chat_id, text=bold_reply, parse_mode="HTML")
             else:
                 fallback = premium("<b>Oops! Mera network thoda slow chal raha hai babu... ek minute baad try karna! 🥺🌸</b>")
-                try: await update.message.reply_text(fallback, parse_mode="HTML")
-                except: await context.bot.send_message(chat_id=chat_id, text=fallback, parse_mode="HTML")
+                try: return await update.message.reply_text(fallback, parse_mode="HTML")
+                except: return await context.bot.send_message(chat_id=chat_id, text=fallback, parse_mode="HTML")
     finally:
-        typing_task.cancel()
+        if not typing_task.done():
+            typing_task.cancel()
 
 # ------------- CORE TEXT HANDLER -------------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     chat_id, user, msg_lower = update.effective_chat.id, update.effective_user, update.message.text.lower()
+    is_private = update.effective_chat.type == "private"
     
     recent_messages_db[chat_id].append((update.message.message_id, user.id))
     
@@ -1502,9 +1517,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mentioned = (update.message.entities and any(e.type == "mention" and bot_un in msg_lower for e in update.message.entities)) or any(f in msg_lower for f in filters_db[chat_id].keys())
     replied = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
 
-    if msg_lower in ["hi","hello","hey","yo","sup","hii","heyy","heya","cindy","cindrella","gm","gn"] and not mentioned and not replied:
+    if msg_lower in ["hi","hello","hey","yo","sup","hii","heyy","heya","cindy","cindrella","gm","gn"] and not mentioned and not replied and not is_private:
         await update.message.reply_text(premium(random.choice(["<b>System Online! 🌸</b>","<b>Guild Manager reporting! 💕</b>","<b>Hey Master! ⚔️</b>","<b>Dungeon ready when you are! ☀️</b>"])), parse_mode="HTML")
-    elif mentioned or replied:
+    elif mentioned or replied or is_private:
         asyncio.create_task(ai_reply(update, context))
 
 # ------------- MAIN -------------
