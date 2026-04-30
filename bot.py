@@ -1192,7 +1192,7 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
-    await update.message.reply_text(premium("<b>Hey, I'm CINDRELLA! 🌸</b>\nYour AI Assistant! Type /commands to see what I can do! ✨"), reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+    await update.message.reply_text(premium("<b>Hey, I'm CINDRELLA your group manager, ai friend and game bot! 🌸</b>\nYour AI Assistant! Type /commands to see what I can do! ✨"), reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
