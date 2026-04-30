@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA MEGA FINAL (DM Fix + Typing Fix + Dev Roleplay + 100+ Load Balancer + SUDO + RPG)
+# bot.py - CINDRELLA final (DM Fix + Typing Fix + Dev Roleplay + 100+ Load Balancer)
 import os
 import logging
 import json
@@ -19,7 +19,7 @@ from telegram import (
 from telegram.constants import ChatAction
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ContextTypes, filters, Application
+    CallbackQueryHandler, ContextTypes, filters
 )
 from telegram.error import BadRequest
 from datetime import date, datetime as dt, time as dt_time, timedelta
@@ -37,46 +37,86 @@ admins_db = ADMIN_IDS.union({OWNER_ID})
 
 # --- ULTIMATE PREMIUM EMOJI ENGINE ---
 EMOJI_MAP = {
-    "🙂": '<tg-emoji emoji-id="5361811943688512595">🙂</tg-emoji>', "🥺": '<tg-emoji emoji-id="5359556488857659527">🥺</tg-emoji>',
-    "❤️": '<tg-emoji emoji-id="5362081079224180363">❤️</tg-emoji>', "👍": '<tg-emoji emoji-id="5361840191688417691">👍</tg-emoji>',
-    "😈": '<tg-emoji emoji-id="5361977209735094094">😈</tg-emoji>', "😢": '<tg-emoji emoji-id="5361967838116453579">😢</tg-emoji>',
-    "🤩": '<tg-emoji emoji-id="5359823764672489041">🤩</tg-emoji>', "😊": '<tg-emoji emoji-id="5359619088005997893">😊</tg-emoji>',
-    "😘": '<tg-emoji emoji-id="5361870050301057412">😘</tg-emoji>', "🫣": '<tg-emoji emoji-id="5362088337718909649">🫣</tg-emoji>',
-    "🐰": '<tg-emoji emoji-id="5361584138623132120">🐰</tg-emoji>', "💃": '<tg-emoji emoji-id="5361979846845014099">💃</tg-emoji>',
-    "😠": '<tg-emoji emoji-id="5361727491746570163">😠</tg-emoji>', "😭": '<tg-emoji emoji-id="5361688841335872649">😭</tg-emoji>',
-    "👻": '<tg-emoji emoji-id="5359348960332882020">👻</tg-emoji>', "🕊️": '<tg-emoji emoji-id="5361953187983006321">🕊️</tg-emoji>',
-    "☺️": '<tg-emoji emoji-id="5359295840177366796">☺️</tg-emoji>', "💓": '<tg-emoji emoji-id="5361744791874837044">💓</tg-emoji>',
-    "🦄": '<tg-emoji emoji-id="5361682407474863210">🦄</tg-emoji>', "🤪": '<tg-emoji emoji-id="5361979593441942591">🤪</tg-emoji>',
-    "💗": '<tg-emoji emoji-id="5362027963363632114">💗</tg-emoji>', "💖": '<tg-emoji emoji-id="5361698629566341740">💖</tg-emoji>',
-    "🥰": '<tg-emoji emoji-id="5359703393919050005">🥰</tg-emoji>', "💕": '<tg-emoji emoji-id="5359477766402090098">💕</tg-emoji>',
-    "🧸": '<tg-emoji emoji-id="5361897482257177939">🧸</tg-emoji>', "✨": '<tg-emoji emoji-id="5362085090723633936">✨</tg-emoji>',
-    "😴": '<tg-emoji emoji-id="5359720835781240886">😴</tg-emoji>', "❤️‍🩹": '<tg-emoji emoji-id="5362080112856538764">❤️‍🩹</tg-emoji>',
-    "🤔": '<tg-emoji emoji-id="5359369473096688455">🤔</tg-emoji>', "🤗": '<tg-emoji emoji-id="5363789578559823865">🤗</tg-emoji>',
-    "😌": '<tg-emoji emoji-id="5359306977027564797">😌</tg-emoji>', "⭐️": '<tg-emoji emoji-id="5359686514697576863">⭐️</tg-emoji>',
-    "👑": '<tg-emoji emoji-id="5359686514697576863">⭐️</tg-emoji>', "😏": '<tg-emoji emoji-id="5361728020027547890">😏</tg-emoji>',
-    "💎": '<tg-emoji emoji-id="5361662345682623608">💎</tg-emoji>', "🔮": '<tg-emoji emoji-id="5361662345682623608">💎</tg-emoji>', 
-    "🔪": '<tg-emoji emoji-id="5361627281569620072">🔪</tg-emoji>', "🔨": '<tg-emoji emoji-id="5361627281569620072">🔪</tg-emoji>', 
-    "🗡️": '<tg-emoji emoji-id="5361627281569620072">🔪</tg-emoji>', "💉": '<tg-emoji emoji-id="5361717162350223774">💉</tg-emoji>',
-    "🌺": '<tg-emoji emoji-id="5359370357859951786">🌺</tg-emoji>', "🎂": '<tg-emoji emoji-id="5362086280429577357">🎂</tg-emoji>',
-    "🦋": '<tg-emoji emoji-id="5361866446823497727">🦋</tg-emoji>', "💦": '<tg-emoji emoji-id="5361909619834755990">💦</tg-emoji>',
-    "🕹️": '<tg-emoji emoji-id="5361902593268259979">🕹️</tg-emoji>', "🛡️": '<tg-emoji emoji-id="5361902593268259979">🕹️</tg-emoji>', 
-    "🌈": '<tg-emoji emoji-id="5362079172258702306">🌈</tg-emoji>', "🤷‍♀️": '<tg-emoji emoji-id="5361754519975763173">🤷‍♀️</tg-emoji>',
-    "🎀": '<tg-emoji emoji-id="5359335109063353153">🎀</tg-emoji>', "👀": '<tg-emoji emoji-id="5364188447877635731">👀</tg-emoji>',
-    "🌸": '<tg-emoji emoji-id="5361957543079844962">🌸</tg-emoji>', "🐾": '<tg-emoji emoji-id="5361929222065494120">🐾</tg-emoji>',
-    "👼": '<tg-emoji emoji-id="5359446911357035515">👼</tg-emoji>', "😜": '<tg-emoji emoji-id="5361537400789016060">😜</tg-emoji>',
-    "☕️": '<tg-emoji emoji-id="5361703414159908977">☕️</tg-emoji>', "🌍": '<tg-emoji emoji-id="5359642014541423992">🌍</tg-emoji>',
-    "💍": '<tg-emoji emoji-id="5362082384894237683">💍</tg-emoji>', "💋": '<tg-emoji emoji-id="5361621298680175398">💋</tg-emoji>',
-    "🐱": '<tg-emoji emoji-id="5361566000976240609">🐱</tg-emoji>', "💔": '<tg-emoji emoji-id="5361978408030968361">💔</tg-emoji>',
-    "🔇": '<tg-emoji emoji-id="5361874933678876634">🔇</tg-emoji>', "⏳": '<tg-emoji emoji-id="5361812489149360115">⏳</tg-emoji>',
-    "🚀": '<tg-emoji emoji-id="5362036733686848529">🚀</tg-emoji>', "👎": '<tg-emoji emoji-id="5362061288014880649">👎</tg-emoji>',
-    "💸": '<tg-emoji emoji-id="5359523546458496837">💸</tg-emoji>', "💰": '<tg-emoji emoji-id="5361866171945592038">💰</tg-emoji>',
-    "💌": '<tg-emoji emoji-id="5359778766300128093">💌</tg-emoji>', "❌": '<tg-emoji emoji-id="5361977776670779271">❌</tg-emoji>',
-    "✅": '<tg-emoji emoji-id="5361693153483037923">✅</tg-emoji>', "📌": '<tg-emoji emoji-id="5361918188294512147">📌</tg-emoji>',
-    "🤡": '<tg-emoji emoji-id="5361775402106756924">🤡</tg-emoji>', "🤣": '<tg-emoji emoji-id="5362088045661135278">🤣</tg-emoji>',
-    "😂": '<tg-emoji emoji-id="5362088045661135278">🤣</tg-emoji>', "☠️": '<tg-emoji emoji-id="5361981590601735641">☠️</tg-emoji>',
-    "🙏": '<tg-emoji emoji-id="5361727818164083480">🙏</tg-emoji>', "🎉": '<tg-emoji emoji-id="5361775092869112132">🎉</tg-emoji>',
-    "❓": '<tg-emoji emoji-id="5359808302790222953">❓</tg-emoji>', "🤍": '<tg-emoji emoji-id="5362081079224180363">❤️</tg-emoji>',
-    "🩷": '<tg-emoji emoji-id="5362027963363632114">💗</tg-emoji>', "😅": '<tg-emoji emoji-id="5361761572312064436">😊</tg-emoji>',
+    "🙂": '<tg-emoji emoji-id="5361811943688512595">🙂</tg-emoji>',
+    "🥺": '<tg-emoji emoji-id="5359556488857659527">🥺</tg-emoji>',
+    "❤️": '<tg-emoji emoji-id="5362081079224180363">❤️</tg-emoji>',
+    "👍": '<tg-emoji emoji-id="5361840191688417691">👍</tg-emoji>',
+    "😈": '<tg-emoji emoji-id="5361977209735094094">😈</tg-emoji>',
+    "😢": '<tg-emoji emoji-id="5361967838116453579">😢</tg-emoji>',
+    "🤩": '<tg-emoji emoji-id="5359823764672489041">🤩</tg-emoji>',
+    "😊": '<tg-emoji emoji-id="5359619088005997893">😊</tg-emoji>',
+    "😘": '<tg-emoji emoji-id="5361870050301057412">😘</tg-emoji>',
+    "🫣": '<tg-emoji emoji-id="5362088337718909649">🫣</tg-emoji>',
+    "🐰": '<tg-emoji emoji-id="5361584138623132120">🐰</tg-emoji>',
+    "💃": '<tg-emoji emoji-id="5361979846845014099">💃</tg-emoji>',
+    "😠": '<tg-emoji emoji-id="5361727491746570163">😠</tg-emoji>',
+    "😭": '<tg-emoji emoji-id="5361688841335872649">😭</tg-emoji>',
+    "👻": '<tg-emoji emoji-id="5359348960332882020">👻</tg-emoji>',
+    "🕊️": '<tg-emoji emoji-id="5361953187983006321">🕊️</tg-emoji>',
+    "☺️": '<tg-emoji emoji-id="5359295840177366796">☺️</tg-emoji>',
+    "💓": '<tg-emoji emoji-id="5361744791874837044">💓</tg-emoji>',
+    "🦄": '<tg-emoji emoji-id="5361682407474863210">🦄</tg-emoji>',
+    "🤪": '<tg-emoji emoji-id="5361979593441942591">🤪</tg-emoji>',
+    "💗": '<tg-emoji emoji-id="5362027963363632114">💗</tg-emoji>',
+    "💖": '<tg-emoji emoji-id="5361698629566341740">💖</tg-emoji>',
+    "🥰": '<tg-emoji emoji-id="5359703393919050005">🥰</tg-emoji>',
+    "💕": '<tg-emoji emoji-id="5359477766402090098">💕</tg-emoji>',
+    "🧸": '<tg-emoji emoji-id="5361897482257177939">🧸</tg-emoji>',
+    "✨": '<tg-emoji emoji-id="5362085090723633936">✨</tg-emoji>',
+    "😴": '<tg-emoji emoji-id="5359720835781240886">😴</tg-emoji>',
+    "❤️‍🩹": '<tg-emoji emoji-id="5362080112856538764">❤️‍🩹</tg-emoji>',
+    "🤔": '<tg-emoji emoji-id="5359369473096688455">🤔</tg-emoji>',
+    "🤗": '<tg-emoji emoji-id="5363789578559823865">🤗</tg-emoji>',
+    "😌": '<tg-emoji emoji-id="5359306977027564797">😌</tg-emoji>',
+    "⭐️": '<tg-emoji emoji-id="5359686514697576863">⭐️</tg-emoji>',
+    "👑": '<tg-emoji emoji-id="5359686514697576863">⭐️</tg-emoji>', 
+    "😏": '<tg-emoji emoji-id="5361728020027547890">😏</tg-emoji>',
+    "💎": '<tg-emoji emoji-id="5361662345682623608">💎</tg-emoji>',
+    "🔮": '<tg-emoji emoji-id="5361662345682623608">💎</tg-emoji>', 
+    "🔪": '<tg-emoji emoji-id="5361627281569620072">🔪</tg-emoji>',
+    "🔨": '<tg-emoji emoji-id="5361627281569620072">🔪</tg-emoji>', 
+    "🗡️": '<tg-emoji emoji-id="5361627281569620072">🔪</tg-emoji>', 
+    "💉": '<tg-emoji emoji-id="5361717162350223774">💉</tg-emoji>',
+    "🌺": '<tg-emoji emoji-id="5359370357859951786">🌺</tg-emoji>',
+    "🎂": '<tg-emoji emoji-id="5362086280429577357">🎂</tg-emoji>',
+    "🦋": '<tg-emoji emoji-id="5361866446823497727">🦋</tg-emoji>',
+    "💦": '<tg-emoji emoji-id="5361909619834755990">💦</tg-emoji>',
+    "🕹️": '<tg-emoji emoji-id="5361902593268259979">🕹️</tg-emoji>',
+    "🛡️": '<tg-emoji emoji-id="5361902593268259979">🕹️</tg-emoji>', 
+    "🌈": '<tg-emoji emoji-id="5362079172258702306">🌈</tg-emoji>',
+    "🤷‍♀️": '<tg-emoji emoji-id="5361754519975763173">🤷‍♀️</tg-emoji>',
+    "🎀": '<tg-emoji emoji-id="5359335109063353153">🎀</tg-emoji>',
+    "👀": '<tg-emoji emoji-id="5364188447877635731">👀</tg-emoji>',
+    "🌸": '<tg-emoji emoji-id="5361957543079844962">🌸</tg-emoji>',
+    "🐾": '<tg-emoji emoji-id="5361929222065494120">🐾</tg-emoji>',
+    "👼": '<tg-emoji emoji-id="5359446911357035515">👼</tg-emoji>',
+    "😜": '<tg-emoji emoji-id="5361537400789016060">😜</tg-emoji>',
+    "☕️": '<tg-emoji emoji-id="5361703414159908977">☕️</tg-emoji>',
+    "🌍": '<tg-emoji emoji-id="5359642014541423992">🌍</tg-emoji>',
+    "💍": '<tg-emoji emoji-id="5362082384894237683">💍</tg-emoji>',
+    "💋": '<tg-emoji emoji-id="5361621298680175398">💋</tg-emoji>',
+    "🐱": '<tg-emoji emoji-id="5361566000976240609">🐱</tg-emoji>',
+    "💔": '<tg-emoji emoji-id="5361978408030968361">💔</tg-emoji>',
+    "🔇": '<tg-emoji emoji-id="5361874933678876634">🔇</tg-emoji>',
+    "⏳": '<tg-emoji emoji-id="5361812489149360115">⏳</tg-emoji>',
+    "🚀": '<tg-emoji emoji-id="5362036733686848529">🚀</tg-emoji>',
+    "👎": '<tg-emoji emoji-id="5362061288014880649">👎</tg-emoji>',
+    "💸": '<tg-emoji emoji-id="5359523546458496837">💸</tg-emoji>',
+    "💰": '<tg-emoji emoji-id="5361866171945592038">💰</tg-emoji>',
+    "💌": '<tg-emoji emoji-id="5359778766300128093">💌</tg-emoji>',
+    "❌": '<tg-emoji emoji-id="5361977776670779271">❌</tg-emoji>',
+    "✅": '<tg-emoji emoji-id="5361693153483037923">✅</tg-emoji>',
+    "📌": '<tg-emoji emoji-id="5361918188294512147">📌</tg-emoji>',
+    "🤡": '<tg-emoji emoji-id="5361775402106756924">🤡</tg-emoji>',
+    "🤣": '<tg-emoji emoji-id="5362088045661135278">🤣</tg-emoji>',
+    "😂": '<tg-emoji emoji-id="5362088045661135278">🤣</tg-emoji>',
+    "☠️": '<tg-emoji emoji-id="5361981590601735641">☠️</tg-emoji>',
+    "🙏": '<tg-emoji emoji-id="5361727818164083480">🙏</tg-emoji>',
+    "🎉": '<tg-emoji emoji-id="5361775092869112132">🎉</tg-emoji>',
+    "❓": '<tg-emoji emoji-id="5359808302790222953">❓</tg-emoji>',
+    "🤍": '<tg-emoji emoji-id="5362081079224180363">❤️</tg-emoji>',
+    "🩷": '<tg-emoji emoji-id="5362027963363632114">💗</tg-emoji>',
+    "😅": '<tg-emoji emoji-id="5361761572312064436">😊</tg-emoji>',
     "💯": '<tg-emoji emoji-id="5362085090723633936">✨</tg-emoji>'
 }
 
@@ -161,10 +201,6 @@ WELCOME_MESSAGES = [
 ]
 WELCOME_BG_URL = "https://images.unsplash.com/photo-1519608487953-e999c86e7455?w=1200"
 
-# --- SUPREME OWNER LOGIC ---
-def is_owner(user_id, context):
-    return user_id == OWNER_ID or user_id == context.bot_data.get('owner_id', OWNER_ID)
-
 # ----------------- MONGODB SETUP -----------------
 try:
     if MONGO_URI:
@@ -173,7 +209,6 @@ try:
         hunters_col = db["hunters"]
         groups_col = db["groups"]
         admins_col = db["admins"]
-        sudo_col = db["sudo_bots"] # NEW SUDO DB
 
         db_admins = admins_col.find_one({"_id": "admin_list"})
         if db_admins: admins_db.update(db_admins.get("ids", []))
@@ -196,10 +231,10 @@ try:
         logging.info("✅ MongoDB Connected & Permanent Data Loaded!")
     else:
         logging.warning("⚠️ MONGO_URI not found. Using temporary RAM memory.")
-        hunters_col = groups_col = admins_col = sudo_col = None
+        hunters_col = groups_col = admins_col = None
 except Exception as e:
     logging.error(f"❌ MongoDB Connection Error: {e}")
-    hunters_col = groups_col = admins_col = sudo_col = None
+    hunters_col = groups_col = admins_col = None
 
 def save_hunter(user_id):
     if hunters_col is not None and user_id in hunter_db:
@@ -255,7 +290,7 @@ async def get_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
 async def check_rights(update: Update, action: str) -> bool:
     user, chat = update.effective_user, update.effective_chat
-    if user.id in admins_db or is_owner(user.id, update.effective_context): return True 
+    if user.id in admins_db: return True 
     if chat.type == "private": return False
     try:
         member = await chat.get_member(user.id)
@@ -1093,19 +1128,18 @@ async def get_anime(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else: await update.message.reply_text(premium("<b>❌ Anime not found!</b> 🥺"), parse_mode="HTML")
     except: await update.message.reply_text(premium("<b>❌ API error.</b> ☠️"), parse_mode="HTML")
 
-# ------------- ADMIN PANEL (SUDO INCORPORATED) -------------
+# ------------- ADMIN PANEL -------------
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if user_id not in admins_db and not is_owner(user_id, context): 
+    if user_id not in admins_db: 
         return await update.message.reply_text(premium("<b>❌ Only Bot Admins & Owner can use this.</b> 🤡"), parse_mode="HTML")
     
-    if is_owner(user_id, context):
+    if user_id == OWNER_ID:
         buttons = [
             [InlineKeyboardButton("📢 Broadcast", callback_data="broadcast")],
             [InlineKeyboardButton("🌐 List Groups", callback_data="list_groups")],
             [InlineKeyboardButton("➕ Add Bot Admin", callback_data="add_admin"), InlineKeyboardButton("➖ Remove Bot Admin", callback_data="remove_admin")],
-            [InlineKeyboardButton("📋 List Admins", callback_data="list_admins")],
-            [InlineKeyboardButton("🤖 Sudo (Make Clone Bot)", callback_data="sudo_menu")]
+            [InlineKeyboardButton("📋 List Admins", callback_data="list_admins")]
         ]
         await update.message.reply_text(premium(f"<b>👑 Owner Panel</b>\n📊 Replies Today: {usage_count['count']} ✨"), reply_markup=InlineKeyboardMarkup(buttons), parse_mode="HTML")
     else:
@@ -1119,7 +1153,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
-    if user_id not in admins_db and not is_owner(user_id, context): return await query.answer("❌ You are not a Bot Admin!", show_alert=True)
+    if user_id not in admins_db: return await query.answer("❌ You are not a Bot Admin!", show_alert=True)
     await query.answer()
 
     if query.data == "broadcast":
@@ -1135,11 +1169,11 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             except: text += f"🔹 {safe_title}: <i>(No Admin Rights)</i>\n"
         for i in range(0, len(text), 4000): await query.message.reply_text(premium(text[i:i+4000]), parse_mode="HTML", disable_web_page_preview=True)
     elif query.data == "add_admin":
-        if not is_owner(user_id, context): return await query.message.reply_text(premium("<b>❌ Only the Owner can add admins.</b> 👑"), parse_mode="HTML")
+        if user_id != OWNER_ID: return await query.message.reply_text(premium("<b>❌ Only the Owner can add admins.</b> 👑"), parse_mode="HTML")
         await query.message.reply_text(premium("<b>Send user ID to add as Bot Admin:</b> ✨"), parse_mode="HTML")
         context.user_data["awaiting_add_admin"] = True
     elif query.data == "remove_admin":
-        if not is_owner(user_id, context): return await query.message.reply_text(premium("<b>❌ Only the Owner can remove admins.</b> 👑"), parse_mode="HTML")
+        if user_id != OWNER_ID: return await query.message.reply_text(premium("<b>❌ Only the Owner can remove admins.</b> 👑"), parse_mode="HTML")
         await query.message.reply_text(premium("<b>Send user ID to remove from Bot Admins:</b> ✨"), parse_mode="HTML")
         context.user_data["awaiting_remove_admin"] = True
     elif query.data == "list_admins":
@@ -1155,31 +1189,10 @@ async def admin_button_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 else:
                     admin_text += f"🔹 Unknown Hunter (<code>{aid}</code>)\n"
         await query.message.reply_text(premium(admin_text), parse_mode="HTML")
-    elif query.data == "sudo_menu":
-        if not is_owner(user_id, context): return await query.answer("❌ Only Owner can make clones!", show_alert=True)
-        markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("➕ Add Sudo Bot", callback_data="sudo_add")],
-            [InlineKeyboardButton("📋 List Sudo Bots", callback_data="sudo_list")],
-            [InlineKeyboardButton("🗑️ Remove Sudo Bot", callback_data="sudo_remove")]
-        ])
-        await query.message.edit_text(premium("<b>🤖 SUDO BOT MANAGER</b>\n\n<i>Note: Adding bots consumes server RAM!</i> ✨"), reply_markup=markup, parse_mode="HTML")
-    elif query.data == "sudo_add":
-        await query.message.reply_text(premium("<b>🤖 Send me the New Bot Token, Owner ID, and Bot Username:</b>\n\n<code>TOKEN, OWNER_ID, @USERNAME</code>\n\n(Example: 1234:ABC, 6559745280, @MyNewBot) ✨"), parse_mode="HTML")
-        context.user_data["awaiting_sudo_add"] = True
-    elif query.data == "sudo_remove":
-        await query.message.reply_text(premium("<b>🗑️ Send me the @Username of the Sudo Bot you want to delete:</b> ✨"), parse_mode="HTML")
-        context.user_data["awaiting_sudo_remove"] = True
-    elif query.data == "sudo_list":
-        if sudo_col is None: return await query.message.reply_text("DB Error!")
-        sudo_bots = list(sudo_col.find())
-        if not sudo_bots: return await query.message.reply_text(premium("<b>❌ Koi Sudo Bot nahi hai!</b>"), parse_mode="HTML")
-        text = "<b>🤖 Active Sudo Bots:</b>\n\n"
-        for i, b in enumerate(sudo_bots): text += f"{i+1}. {b['username']} (Owner: <code>{b['owner']}</code>)\n"
-        await query.message.reply_text(premium(text), parse_mode="HTML")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("➕ Add me to your group", url=f"https://t.me/{context.bot.username}?startgroup=true")]]
-    await update.message.reply_text(premium("<b>Hey, I'm CINDRELLA your group manager, ai friend and game bot! 🌸</b>\nYour AI Assistant! Type /commands to see what I can do! ✨"), reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+    await update.message.reply_text(premium("<b>Hey, I'm CINDRELLA! 🌸</b>\nYour AI Assistant! Type /commands to see what I can do! ✨"), reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 async def couple_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -1231,7 +1244,7 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
             except: 
                 await context.bot.send_message(chat_id=chat_id, text=final_msg, parse_mode="HTML")
 
-# --- 🚀 ULTRA-FAST FAIL-PROOF AI REPLY (LOAD BALANCER 10 MODELS) ---
+# --- 🚀 ULTRA-FAST FAIL-PROOF AI REPLY ---
 ai_queue = asyncio.Semaphore(15)
 
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1262,16 +1275,13 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             system_prompt = (
                 "You are CINDRELLA, an exceptionally smart, caring, and witty AI companion. Speak naturally like a close best friend. "
-                "CRITICAL RULES: 1. Reply in the exact same language and script the user uses (Hindi, Hinglish, or English every language). "
+                "CRITICAL RULES: 1. Reply in the exact same language and script the user uses (Hindi, Hinglish, or English). "
                 "2. Keep responses concise (1-3 lines). 3. You MUST remember all details, names, and places the user mentioned earlier. "
-                "4. Do not act like a bot. 5. If anyone asks about your creator, owner, creatively and affectionately state that 'dev' is your owner. If they ask for his username, give '@hello_devu'. "
+                "4. Do not act like a bot. 5. If anyone asks about your creator, owner, boyfriend, or husband, creatively and affectionately state that 'dev' is your owner/boyfriend. If they ask for his username, give '@hello_devu'. "
                 "6. Use basic emojis (like 🌸, ❤️, 🥺, ✨, 🎀, 🦋, 💖, 💗, 💕, 😊, 🥰, 😭, 🔥, 😂, 🤣, 👍, ✅, ❌, ⚠️, 👑, 🤍, 🩷, 😅, ☕️, 🧸). I will handle replacing them with premium aesthetic versions."
             )
             
-            # 🔥 MAGIC LOAD BALANCER 10 MODELS 🔥
             models = [
-                "liquid/lfm-2.5-1.2b-instruct:free",
-                "baidu/qianfan-ocr-fast:free",
                 "meta-llama/llama-3.3-70b-instruct:free", 
                 "google/gemma-3-27b-it:free",
                 "google/gemma-2-9b-it:free",
@@ -1279,14 +1289,9 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "huggingface/zephyr-7b-beta:free",
                 "mistralai/mistral-7b-instruct:free",
                 "qwen/qwen-2-7b-instruct:free",
-                "z-ai/glm-4.5-air:free"
+                "z-ai/glm-4.5-air:free",
+                "baidu/qianfan-ocr-fast:free"
             ]
-            
-            my_model_index = user_id % len(models)
-            primary_model = models[my_model_index]
-            fallback_models = models.copy()
-            fallback_models.remove(primary_model)
-            test_models = [primary_model] + fallback_models
             
             messages = [{"role": "system", "content": system_prompt}]
             messages.extend(chat_history_db[user_id][-30:])
@@ -1295,27 +1300,34 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             success = False
             reply = ""
             
-            # 🔥 STRICT 5-SECOND TIMEOUT 🔥
-            for model in test_models[:4]:
+            for sweep in range(2):
                 if success: break
-                try:
-                    payload = {
-                        "model": model, 
-                        "messages": messages,
-                        "temperature": 0.6,
-                        "frequency_penalty": 0.0,
-                        "presence_penalty": 0.0
-                    }
-                    async with httpx.AsyncClient(timeout=5.0) as client:
-                        res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
-                        if res.status_code == 200:
-                            data = res.json()
-                            if "choices" in data and len(data["choices"]) > 0:
-                                reply = data["choices"][0]["message"]["content"].strip()
-                                success = True
-                                break
-                except: 
-                    continue
+                for model in models:
+                    try:
+                        payload = {
+                            "model": model, 
+                            "messages": messages,
+                            "temperature": 0.6,
+                            "frequency_penalty": 0.0,
+                            "presence_penalty": 0.0
+                        }
+                        async with httpx.AsyncClient(timeout=15) as client:
+                            res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+                            
+                            if res.status_code == 200:
+                                data = res.json()
+                                if "choices" in data and len(data["choices"]) > 0:
+                                    reply = data["choices"][0]["message"]["content"].strip()
+                                    success = True
+                                    break
+                            elif res.status_code == 429:
+                                await asyncio.sleep(1.5) 
+                            else:
+                                continue
+                    except: 
+                        continue
+                if not success:
+                    await asyncio.sleep(1)
                     
             typing_task.cancel() # Cancel typing JUST before replying
             
@@ -1350,25 +1362,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     recent_messages_db[chat_id].append((update.message.message_id, user.id))
     
     ensure_user_registered(update)
-
-    # --- SUDO ADD LOGIC ---
-    if is_owner(user.id, context) and context.user_data.pop("awaiting_sudo_add", None):
-        try:
-            parts = update.message.text.split(",")
-            token = parts[0].strip()
-            new_owner = int(parts[1].strip())
-            new_username = parts[2].strip()
-            if sudo_col is not None:
-                sudo_col.update_one({"username": new_username}, {"$set": {"token": token, "owner": new_owner, "username": new_username}}, upsert=True)
-            return await update.message.reply_text(premium(f"<b>✅ SUDO BOT SAVED!</b>\nUsername: {new_username}\n\n<i>To activate it, restart the server from Render!</i> ✨"), parse_mode="HTML")
-        except Exception as e:
-            return await update.message.reply_text(premium(f"<b>❌ Invalid Format!</b> Error: {e} 🤡"), parse_mode="HTML")
-
-    # --- SUDO REMOVE LOGIC ---
-    if is_owner(user.id, context) and context.user_data.pop("awaiting_sudo_remove", None):
-        uname = update.message.text.strip()
-        if sudo_col is not None: sudo_col.delete_one({"username": uname})
-        return await update.message.reply_text(premium(f"<b>🗑️ Removed Sudo Bot: {uname}</b> (Restart server to apply) ✨"), parse_mode="HTML")
     
     if context.user_data.get("awaiting_give_shadow"):
         shadow_name = update.message.text.strip()
@@ -1459,7 +1452,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if (hunter_db[user.id]["exp"] // 5) % 5 == 0: 
             save_hunter(user.id)
 
-    if user.id in admins_db or is_owner(user.id, context):
+    if user.id in admins_db:
         if context.user_data.pop("awaiting_broadcast", None):
             success_groups = 0
             for cid in list(known_groups.keys()):
@@ -1479,7 +1472,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
             return await update.message.reply_text(premium(f"<b>✅ Broadcast successfully sent to {success_groups} Groups and {success_users} Users DMs!</b> 🎉"), parse_mode="HTML")
             
-        if is_owner(user.id, context):
+        if user.id == OWNER_ID:
             if context.user_data.pop("awaiting_add_admin", None):
                 try: admins_db.add(int(update.message.text.strip())); save_admins(); await update.message.reply_text(premium("<b>✅ Admin added.</b> ✨"), parse_mode="HTML")
                 except: await update.message.reply_text(premium("<b>❌ Invalid ID.</b> 🤡"), parse_mode="HTML")
@@ -1490,7 +1483,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except: await update.message.reply_text(premium("<b>❌ Invalid ID.</b> 🤡"), parse_mode="HTML")
                 return
 
-    if user.id not in admins_db and not is_owner(user.id, context):
+    if user.id not in admins_db:
         now = time.time()
         spam_tracker[chat_id][user.id] = [t for t in spam_tracker[chat_id][user.id] + [now] if now - t < 5]
         
@@ -1529,29 +1522,38 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif mentioned or replied or is_private:
         asyncio.create_task(ai_reply(update, context))
 
-# --- MASTER HANDLERS ATTACHER (For Main Bot and Sudo Clones) ---
-def setup_handlers(application: Application):
+# ------------- MAIN -------------
+def main():
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("admin", admin_panel))
     application.add_handler(CommandHandler("id", get_id)) 
-    application.add_handler(CallbackQueryHandler(admin_button_handler, pattern="^(broadcast|list_groups|add_admin|remove_admin|list_admins|sudo_menu|sudo_add|sudo_list|sudo_remove)$"))
+    
+    application.add_handler(CallbackQueryHandler(admin_button_handler, pattern="^(broadcast|list_groups|add_admin|remove_admin|list_admins)$"))
     application.add_handler(CallbackQueryHandler(dungeon_button_handler, pattern="^dungeon_"))
     application.add_handler(CallbackQueryHandler(pvp_button_handler, pattern="^pvp_"))
     application.add_handler(CallbackQueryHandler(shop_button_handler, pattern="^shop_"))
     application.add_handler(CallbackQueryHandler(give_button_handler, pattern="^give_"))
+    
     application.add_handler(CommandHandler("commands", commands_list))
     application.add_handler(CommandHandler("stats", hunter_profile))
     application.add_handler(CommandHandler("hunt", hunt))
     application.add_handler(CommandHandler("daily", daily_quest))
     application.add_handler(CommandHandler("give", give_menu))
+    
     application.add_handler(CommandHandler("top_hunter", top_hunter_local))
     application.add_handler(CommandHandler("world_top", world_top_global))
+    
     application.add_handler(CommandHandler("pvp", pvp_request))
     application.add_handler(CommandHandler("shop", shop_menu))
     application.add_handler(CommandHandler("arise", arise_shadow))
     application.add_handler(CommandHandler("open_box", open_loot_box))
     application.add_handler(CommandHandler("couple", couple_command))
-    application.add_handler(CommandHandler(["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote", "demote"], mod_action))
+
+    mod_cmds = ["ban", "unban", "kick", "mute", "unmute", "pin", "unpin", "promote", "demote"]
+    application.add_handler(CommandHandler(mod_cmds, mod_action))
+    
     application.add_handler(CommandHandler("warn", warn_user))
     application.add_handler(CommandHandler("unwarn", unwarn_user))
     application.add_handler(CommandHandler("setrules", set_rules))
@@ -1563,50 +1565,21 @@ def setup_handlers(application: Application):
     application.add_handler(CommandHandler("rmfilter", rm_filter))
     application.add_handler(CommandHandler("afk", set_afk))
     application.add_handler(CommandHandler("anime", get_anime))
+
     application.add_handler(CommandHandler("purge", purge))
     application.add_handler(CommandHandler("purgegroup", purge_group))
     application.add_handler(CommandHandler("purgeall", purge_all))
+    
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-
-    # 👇 YAHAN SE NAYA JADOO SHURU (Modular Files) 👇
-    try:
-        import new_features
-        new_features.setup(application)
-    except Exception as e:
-        logging.error(f"⚠️ Nayi file mein error hai, par main bot safe hai! Error: {e}")
-    # 👆 NAYA JADOO KHATAM 👆
-
-# --- SUDO BOT AUTO-STARTER ---
-async def start_sudo_bots(application: Application):
-    application.bot_data['owner_id'] = OWNER_ID # Main bot owner
-    if sudo_col is not None:
-        try:
-            for s_bot in sudo_col.find():
-                try:
-                    app = ApplicationBuilder().token(s_bot["token"]).build()
-                    app.bot_data['owner_id'] = int(s_bot["owner"])
-                    setup_handlers(app) # Assign powers to clone
-                    await app.initialize()
-                    await app.start()
-                    await app.updater.start_polling(drop_pending_updates=True)
-                    logging.info(f"✅ Sudo Bot {s_bot.get('username')} zinda ho gaya!")
-                except Exception as e:
-                    logging.error(f"❌ Sudo Bot Error: {e}")
-        except: pass
-
-# ------------- MAIN -------------
-def main():
-    # post_init hook se main bot chalu hote hi baaki Sudo bots start ho jayenge!
-    application = ApplicationBuilder().token(BOT_TOKEN).post_init(start_sudo_bots).build()
-    setup_handlers(application)
 
     if application.job_queue:
         ist = ZoneInfo("Asia/Kolkata")
         application.job_queue.run_daily(couple_daily_reset, time=dt_time(hour=1, minute=0, tzinfo=ist))
 
     threading.Thread(target=run_dummy_server, daemon=True).start()
-    logging.info("🤖 Main Bot and Sudo Factory running in POLLING mode without server conflicts...")
+
+    logging.info("🤖 Bot starting in POLLING mode without server conflicts...")
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
