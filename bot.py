@@ -1573,6 +1573,14 @@ def main():
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
+    # 👇 YAHAN SE NAYA JADOO SHURU 👇
+    try:
+        import new_features
+        new_features.setup(application)
+    except Exception as e:
+        logging.error(f"⚠️ Nayi file mein error hai, par main bot safe hai! Error: {e}")
+    # 👆 NAYA JADOO KHATAM 👆
+
     if application.job_queue:
         ist = ZoneInfo("Asia/Kolkata")
         application.job_queue.run_daily(couple_daily_reset, time=dt_time(hour=1, minute=0, tzinfo=ist))
