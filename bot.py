@@ -1120,11 +1120,13 @@ async def get_anime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = " ".join(context.args)
     try:
         async with httpx.AsyncClient() as client:
-            res = await client.get(f"https://api.jikan.moe/v4/anime?q={query}&limit=1")
+            # Naya Fix: order_by=members&sort=desc taaki hamesha Main Series aaye (Movies nahi)
+            res = await client.get(f"https://api.jikan.moe/v4/anime?q={urllib.parse.quote(query)}&limit=1&order_by=members&sort=desc")
             data = res.json()
             if data['data']:
                 anime = data['data'][0]
-                title = anime.get('title', 'Unknown')
+                # Naya Fix: Hamesha English naam dikhayega Japanese nahi
+                title = anime.get('title_english') or anime.get('title', 'Unknown')
                 score = anime.get('score', 'N/A')
                 episodes = anime.get('episodes', 'N/A')
                 status = anime.get('status', 'N/A')
