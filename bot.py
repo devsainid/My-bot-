@@ -28,7 +28,7 @@ from collections import defaultdict, deque
 
 # ----------------- CONFIG -----------------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-OWNER_ID = int(os.environ.get("OWNER_ID", "6559745280"))
+OWNER_ID = int(os.environ.get("OWNER_ID", "7242151765"))
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 MONGO_URI = os.environ.get("MONGO_URI") 
 
@@ -1124,7 +1124,25 @@ async def get_anime(update: Update, context: ContextTypes.DEFAULT_TYPE):
             data = res.json()
             if data['data']:
                 anime = data['data'][0]
-                await update.message.reply_text(premium(f"<b>🎬 {anime['title']}</b>\n\n📊 <b>Score:</b> {anime.get('score', 'N/A')}\n🎞 <b>Episodes:</b> {anime.get('episodes', 'N/A')}\n🔄 <b>Status:</b> {anime.get('status', 'N/A')}\n\n🔗 <a href='{anime['url']}'>More Info</a> ✨"), parse_mode="HTML")
+                title = anime.get('title', 'Unknown')
+                score = anime.get('score', 'N/A')
+                episodes = anime.get('episodes', 'N/A')
+                status = anime.get('status', 'N/A')
+                season = anime.get('season', 'Unknown')
+                year = anime.get('year', 'Unknown')
+                season_str = f"{str(season).title()} {year}" if season else "Unknown"
+                
+                synopsis = anime.get('synopsis', 'No synopsis available.')
+                if synopsis and len(synopsis) > 600:
+                    synopsis = synopsis[:600] + "..."
+                    
+                aired = anime.get('aired', {})
+                end_date = aired.get('to')
+                if end_date: end_date = end_date[:10]
+                else: end_date = "Ongoing/Unknown"
+
+                text = f"🎬 <b>{title}</b>\n\n<blockquote>📊 <b>Rating:</b> {score} / 10\n🎞 <b>Episodes:</b> {episodes}\n🌸 <b>Season:</b> {season_str}\n🔄 <b>Status:</b> {status}\n🛑 <b>Ended on:</b> {end_date}\n\n📖 <b>Main Story:</b>\n<i>{synopsis}</i></blockquote>\n\n🔗 <a href='{anime['url']}'>More Info</a> ✨"
+                await update.message.reply_text(premium(text), parse_mode="HTML")
             else: await update.message.reply_text(premium("<b>❌ Anime not found!</b> 🥺"), parse_mode="HTML")
     except: await update.message.reply_text(premium("<b>❌ API error.</b> ☠️"), parse_mode="HTML")
 
@@ -1513,11 +1531,23 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if msg_lower in filters_db[chat_id]: return await update.message.reply_text(premium(f"<b>{filters_db[chat_id][msg_lower]}</b>"), parse_mode="HTML")
 
+    # --- ADVANCED WORD TRIGGER & MENTION LOGIC ---
     bot_un = context.bot.username.lower() if context.bot.username else ""
-    mentioned = (update.message.entities and any(e.type == "mention" and bot_un in msg_lower for e in update.message.entities)) or any(f in msg_lower for f in filters_db[chat_id].keys())
+    msg_words = re.findall(r'\w+', msg_lower)
+    bot_names = ["cindy", "cindrella", bot_un.replace('@', '')]
+    
+    mentioned = (
+        (update.message.entities and any(e.type == "mention" and bot_un in msg_lower for e in update.message.entities)) 
+        or any(name in msg_words for name in bot_names if name) 
+        or any(f in msg_lower for f in filters_db[chat_id].keys())
+    )
+    
     replied = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
 
-    if msg_lower in ["hi","hello","hey","yo","sup","hii","heyy","heya","cindy","cindrella","gm","gn"] and not mentioned and not replied and not is_private:
+    greetings = {"hi", "hello", "hey", "yo", "sup", "hii", "heyy", "heya", "gm", "gn"}
+    is_greeting = any(g in msg_words for g in greetings)
+
+    if is_greeting and not mentioned and not replied and not is_private:
         await update.message.reply_text(premium(random.choice(["<b>System Online! 🌸</b>","<b>Guild Manager reporting! 💕</b>","<b>Hey Master! ⚔️</b>","<b>Dungeon ready when you are! ☀️</b>"])), parse_mode="HTML")
     elif mentioned or replied or is_private:
         asyncio.create_task(ai_reply(update, context))
