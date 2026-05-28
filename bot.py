@@ -1341,15 +1341,97 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                     success = True
                                     break
                             elif res.status_code == 429:
+# --- 🚀 ULTRA-FAST FAIL-PROOF AI REPLY ---
+ai_queue = asyncio.Semaphore(15)
+
+async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message_text = update.message.text
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+    
+    async def keep_typing():
+        try:
+            while True:
+                await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+                await asyncio.sleep(4)
+        except asyncio.CancelledError:
+            pass
+            
+    typing_task = asyncio.create_task(keep_typing())
+    
+    try:
+        async with ai_queue:
+            if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
+            
+            headers = {
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}", 
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://t.me/CindrellaBot",
+                "X-Title": "Cindrella Bot"
+            }
+            
+            system_prompt = (
+                "You are CINDRELLA, an exceptionally smart, caring, and witty AI companion. Speak naturally like a close best friend. "
+                "CRITICAL RULES: 1. Reply in the exact same language and script the user uses (Hindi, Hinglish, or English). "
+                "2. Keep responses concise (1-3 lines). 3. You MUST remember all details, names, and places the user mentioned earlier. "
+                "4. Do not act like a bot. 5. If anyone asks about your creator, owner, boyfriend, or husband, creatively and affectionately state that 'dev' is your owner/boyfriend. If they ask for his username, give '@hello_devu'. "
+                "6. Use basic emojis (like 🌸, ❤️, 🥺, ✨, 🎀, 🦋, 💖, 💗, 💕, 😊, 🥰, 😭, 🔥, 😂, 🤣, 👍, ✅, ❌, ⚠️, 👑, 🤍, 🩷, 😅, ☕️, 🧸). I will handle replacing them with premium aesthetic versions."
+            )
+            
+            # 🔥 Re-ordered for Speed and Stability
+            models = [
+                "google/gemma-3-27b-it:free",          # Very Fast & Smart
+                "qwen/qwen-2-7b-instruct:free",        # Extremely Fast
+                "microsoft/phi-3-mini-128k-instruct:free", # Fast
+                "meta-llama/llama-3.3-70b-instruct:free",  # Smart but sometimes slow
+                "google/gemma-2-9b-it:free",
+                "huggingface/zephyr-7b-beta:free",
+                "mistralai/mistral-7b-instruct:free",
+                "z-ai/glm-4.5-air:free",
+                "baidu/qianfan-ocr-fast:free"
+            ]
+            
+            messages = [{"role": "system", "content": system_prompt}]
+            messages.extend(chat_history_db[user_id][-30:])
+            messages.append({"role": "user", "content": message_text})
+            
+            success = False
+            reply = ""
+            
+            for sweep in range(2):
+                if success: break
+                for model in models:
+                    try:
+                        payload = {
+                            "model": model, 
+                            "messages": messages,
+                            "temperature": 0.6,
+                            "frequency_penalty": 0.0,
+                            "presence_penalty": 0.0
+                        }
+                        # Timeout increased to 20s for long coding answers
+                        async with httpx.AsyncClient(timeout=20.0) as client:
+                            res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+                            
+                            if res.status_code == 200:
+                                data = res.json()
+                                if "choices" in data and len(data["choices"]) > 0:
+                                    reply = data["choices"][0]["message"]["content"].strip()
+                                    success = True
+                                    break
+                            elif res.status_code == 429:
+                                logging.warning(f"⚠️ Rate limited on {model}. Retrying...")
                                 await asyncio.sleep(1.5) 
                             else:
+                                logging.warning(f"⚠️ Model {model} failed with status {res.status_code}: {res.text}")
                                 continue
-                    except: 
+                    except Exception as e: 
+                        logging.error(f"❌ Model {model} Timeout/Error: {e}")
                         continue
                 if not success:
                     await asyncio.sleep(1)
                     
-            typing_task.cancel() # Cancel typing JUST before replying
+            typing_task.cancel()
             
             if success:
                 reply = reply.replace("**", "").replace("*", "")
