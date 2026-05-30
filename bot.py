@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA FINAL (Clean & Pure + 9-Model AI + Anime + Trigger Fix)
+# bot.py - CINDRELLA FINAL (DM Fix + Typing Fix + Dev Roleplay + Direct Gemini API)
 import os
 import logging
 import json
@@ -29,7 +29,7 @@ from collections import defaultdict, deque
 # ----------------- CONFIG -----------------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = int(os.environ.get("OWNER_ID", "7242151765"))
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") # NEW: Direct Gemini API Key From Google AI Studio
 MONGO_URI = os.environ.get("MONGO_URI") 
 
 ADMIN_IDS = set(json.loads(os.environ.get("ADMIN_IDS", "[]")))
@@ -175,6 +175,9 @@ hunter_db = {}
 group_msg_counts = defaultdict(int)
 active_dungeons = {}
 arise_targets = {} 
+
+# NAYA: 100+ Users Load Balancer Queue
+ai_queue = asyncio.Semaphore(15)
 
 ALL_SHADOWS = ["Goblin Chieftain", "Direwolf Alpha", "High Orc Kargal", "Assassin Kasaka", "Giant Iron Golem", "Tank", "Tusk", "Ant King Beru", "Blood-Red Igris", "Kamish", "Bellion"]
 
@@ -1259,7 +1262,7 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
             except: 
                 await context.bot.send_message(chat_id=chat_id, text=final_msg, parse_mode="HTML")
 
-# --- 🚀 ULTRA-FAST FAIL-PROOF AI REPLY ---
+# --- 🚀 ULTRA-FAST FAIL-PROOF AI REPLY (DIRECT GEMINI API) ---
 ai_queue = asyncio.Semaphore(15)
 
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1281,14 +1284,14 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         async with ai_queue:
             if usage_count["date"] != str(date.today()): usage_count.update({"date": str(date.today()), "count": 0})
             
-            headers = {
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}", 
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://t.me/CindrellaBot",
-                "X-Title": "Cindrella Bot"
-            }
+            # --- Convert History to Gemini Format ---
+            gemini_contents = []
+            for hist in chat_history_db[user_id][-20:]:
+                role = "model" if hist["role"] == "assistant" else "user"
+                gemini_contents.append({"role": role, "parts": [{"text": hist["content"]}]})
+            gemini_contents.append({"role": "user", "parts": [{"text": message_text}]})
             
-            system_prompt = (
+            system_instruction = (
                 "You are CINDRELLA, an exceptionally smart, caring, and witty AI companion. Speak naturally like a close best friend. "
                 "CRITICAL RULES: 1. Reply in the exact same language and script the user uses (Hindi, Hinglish, or English). "
                 "2. Keep responses concise (1-3 lines). 3. You MUST remember all details, names, and places the user mentioned earlier. "
@@ -1296,58 +1299,32 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "6. Use basic emojis (like 🌸, ❤️, 🥺, ✨, 🎀, 🦋, 💖, 💗, 💕, 😊, 🥰, 😭, 🔥, 😂, 🤣, 👍, ✅, ❌, ⚠️, 👑, 🤍, 🩷, 😅, ☕️, 🧸). I will handle replacing them with premium aesthetic versions."
             )
             
-            # 🔥 Re-ordered for Speed and Stability
-            models = [
-                "google/gemma-3-27b-it:free",          # Very Fast & Smart
-                "qwen/qwen-2-7b-instruct:free",        # Extremely Fast
-                "microsoft/phi-3-mini-128k-instruct:free", # Fast
-                "meta-llama/llama-3.3-70b-instruct:free",  # Smart but sometimes slow
-                "google/gemma-2-9b-it:free",
-                "huggingface/zephyr-7b-beta:free",
-                "mistralai/mistral-7b-instruct:free",
-                "z-ai/glm-4.5-air:free",
-                "baidu/qianfan-ocr-fast:free"
-            ]
-            
-            messages = [{"role": "system", "content": system_prompt}]
-            messages.extend(chat_history_db[user_id][-30:])
-            messages.append({"role": "user", "content": message_text})
-            
+            # 🔥 Primary: Gemini Flash (Fastest) | Backup: Gemma-2-27b
+            models = ["gemini-1.5-flash", "gemma-2-27b-it"]
             success = False
             reply = ""
             
-            for sweep in range(2):
-                if success: break
-                for model in models:
-                    try:
-                        payload = {
-                            "model": model, 
-                            "messages": messages,
-                            "temperature": 0.6,
-                            "frequency_penalty": 0.0,
-                            "presence_penalty": 0.0
-                        }
-                        # Timeout increased to 20s for long coding answers
-                        async with httpx.AsyncClient(timeout=20.0) as client:
-                            res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
-                            
-                            if res.status_code == 200:
-                                data = res.json()
-                                if "choices" in data and len(data["choices"]) > 0:
-                                    reply = data["choices"][0]["message"]["content"].strip()
-                                    success = True
-                                    break
-                            elif res.status_code == 429:
-                                logging.warning(f"⚠️ Rate limited on {model}. Retrying...")
-                                await asyncio.sleep(1.5) 
-                            else:
-                                logging.warning(f"⚠️ Model {model} failed with status {res.status_code}: {res.text}")
-                                continue
-                    except Exception as e: 
-                        logging.error(f"❌ Model {model} Timeout/Error: {e}")
-                        continue
-                if not success:
-                    await asyncio.sleep(1)
+            for model in models:
+                try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+                    payload = {
+                        "contents": gemini_contents,
+                        "systemInstruction": {"parts": [{"text": system_instruction}]},
+                        "generationConfig": {"temperature": 0.6}
+                    }
+                    
+                    async with httpx.AsyncClient(timeout=20.0) as client:
+                        res = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
+                        if res.status_code == 200:
+                            data = res.json()
+                            reply = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                            success = True
+                            break
+                        else:
+                            logging.warning(f"⚠️ Google API {model} failed with code {res.status_code}")
+                except Exception as e:
+                    logging.error(f"❌ Google API {model} Error: {e}")
+                    continue
                     
             typing_task.cancel()
             
@@ -1360,8 +1337,8 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 chat_history_db[user_id].append({"role": "user", "content": message_text})
                 chat_history_db[user_id].append({"role": "assistant", "content": reply})
-                if len(chat_history_db[user_id]) > 60:
-                    chat_history_db[user_id] = chat_history_db[user_id][-60:]
+                if len(chat_history_db[user_id]) > 40:
+                    chat_history_db[user_id] = chat_history_db[user_id][-40:]
                     
                 try: return await update.message.reply_text(bold_reply, parse_mode="HTML")
                 except BadRequest: return await context.bot.send_message(chat_id=chat_id, text=bold_reply, parse_mode="HTML")
@@ -1380,6 +1357,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_private = update.effective_chat.type == "private"
     
     recent_messages_db[chat_id].append((update.message.message_id, user.id))
+    
     ensure_user_registered(update)
     
     if context.user_data.get("awaiting_give_shadow"):
@@ -1601,14 +1579,6 @@ def main():
     
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-
-    # 👇 YAHAN SE NAYA JADOO SHURU (Modular Files) 👇
-    try:
-        import new_features
-        new_features.setup(application)
-    except Exception as e:
-        logging.error(f"⚠️ Nayi file mein error hai, par main bot safe hai! Error: {e}")
-    # 👆 NAYA JADOO KHATAM 👆
 
     if application.job_queue:
         ist = ZoneInfo("Asia/Kolkata")
