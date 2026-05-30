@@ -1,4 +1,4 @@
-# bot.py - CINDRELLA FINAL (DM Fix + Typing Fix + Dev Roleplay + Direct Gemini API)
+# bot.py - CINDRELLA FINAL (Direct Gemini API + Key Space Fix)
 import os
 import logging
 import json
@@ -29,7 +29,7 @@ from collections import defaultdict, deque
 # ----------------- CONFIG -----------------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = int(os.environ.get("OWNER_ID", "7242151765"))
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") # NEW: Direct Gemini API Key From Google AI Studio
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") 
 MONGO_URI = os.environ.get("MONGO_URI") 
 
 ADMIN_IDS = set(json.loads(os.environ.get("ADMIN_IDS", "[]")))
@@ -1299,17 +1299,22 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "6. Use basic emojis (like 🌸, ❤️, 🥺, ✨, 🎀, 🦋, 💖, 💗, 💕, 😊, 🥰, 😭, 🔥, 😂, 🤣, 👍, ✅, ❌, ⚠️, 👑, 🤍, 🩷, 😅, ☕️, 🧸). I will handle replacing them with premium aesthetic versions."
             )
             
-            # 🔥 Primary: Gemini Flash (Fastest) | Backup: Gemma-2-27b
-            models = ["gemini-1.5-flash", "gemma-2-27b-it"]
+            # 🔥 Primary: Gemini Flash Latest (Direct AI Studio)
+            models = ["gemini-1.5-flash-latest"]
             success = False
             reply = ""
             
             for model in models:
                 try:
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+                    # Naya Code: Extra space htane ke liye strip() lagaya hai
+                    clean_key = GEMINI_API_KEY.strip()
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={clean_key}"
+                    
                     payload = {
                         "contents": gemini_contents,
-                        "systemInstruction": {"parts": [{"text": system_instruction}]},
+                        "system_instruction": {
+                            "parts": [{"text": system_instruction}]
+                        },
                         "generationConfig": {"temperature": 0.6}
                     }
                     
@@ -1321,9 +1326,9 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             success = True
                             break
                         else:
-                            logging.warning(f"⚠️ Google API {model} failed with code {res.status_code}")
+                            logging.warning(f"⚠️ Google API failed: {res.status_code} - {res.text}")
                 except Exception as e:
-                    logging.error(f"❌ Google API {model} Error: {e}")
+                    logging.error(f"❌ Google API Error: {e}")
                     continue
                     
             typing_task.cancel()
