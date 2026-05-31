@@ -1300,7 +1300,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             
             # 🔥 Primary: Gemini Flash Latest (Direct AI Studio)
-            models = ["gemini-1.5-flash"]
+            models = ["gemini-3.5-flash"]
             success = False
             reply = ""
             
